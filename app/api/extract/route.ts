@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { groq, SYSTEM_PROMPT } from "@/lib/groq";
 import { PlanSchema } from "@/lib/schema";
 import { planId, savePlan } from "@/lib/store";
+import { encodePlan } from "@/lib/codec";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -61,8 +62,9 @@ export async function POST(req: NextRequest) {
 
     const id = planId(plan);
     savePlan(id, plan);
+    const p = encodePlan(plan);
 
-    return NextResponse.json({ id, plan });
+    return NextResponse.json({ id, p, plan });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

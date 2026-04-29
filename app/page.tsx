@@ -9,6 +9,7 @@ export default function Home() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [planId, setPlanId] = useState<string | null>(null);
+  const [planPayload, setPlanPayload] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -25,6 +26,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setPlanId(null);
+    setPlanPayload(null);
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -34,6 +36,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       setPlanId(data.id);
+      setPlanPayload(data.p);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -105,9 +108,13 @@ export default function Home() {
         <div style={{ color: "#C02942", marginTop: 16 }}>{error}</div>
       ) : null}
 
-      {planId ? (
+      {planId && planPayload ? (
         <div style={{ marginTop: 32 }}>
           <h2>Two A4 sheets ready</h2>
+          <p style={{ fontSize: 14, color: "#555" }}>
+            These links are permanent (the plan is encoded inside the URL) -
+            share them on WhatsApp or save the PNGs.
+          </p>
           <div
             style={{
               display: "grid",
@@ -117,12 +124,12 @@ export default function Home() {
           >
             <PreviewCard
               title="For Parents"
-              href={`/api/render?id=${planId}&view=parent`}
+              href={`/api/render?p=${planPayload}&view=parent`}
               accent="#C02942"
             />
             <PreviewCard
               title="For Teachers (with worked example)"
-              href={`/api/render?id=${planId}&view=teacher`}
+              href={`/api/render?p=${planPayload}&view=teacher`}
               accent="#185A9D"
             />
           </div>
