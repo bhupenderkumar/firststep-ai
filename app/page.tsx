@@ -123,7 +123,7 @@ export default function Home() {
             }}
           >
             <PreviewCard
-              title="For Parents"
+              title="For Parents (English + हिंदी)"
               href={`/api/render?p=${planPayload}&view=parent`}
               accent="#C02942"
             />
@@ -148,6 +148,24 @@ function PreviewCard({
   href: string;
   accent: string;
 }) {
+  const [copied, setCopied] = useState(false);
+  const fullUrl =
+    typeof window !== "undefined" ? new URL(href, window.location.origin).toString() : href;
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Fallback: select the text
+      window.prompt("Copy this link:", fullUrl);
+    }
+  }
+
+  const waText = `Tomorrow's plan from First Step School:\n${fullUrl}`;
+  const waHref = `https://wa.me/?text=${encodeURIComponent(waText)}`;
+
   return (
     <div
       style={{
@@ -167,9 +185,50 @@ function PreviewCard({
           style={{ width: "100%", border: "1px solid #ddd", borderRadius: 6 }}
         />
       </a>
-      <div style={{ marginTop: 8 }}>
-        <a href={href} target="_blank" rel="noreferrer">
-          Open / Download A4 PNG
+      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <button
+          onClick={copyLink}
+          style={{
+            padding: "8px 14px",
+            background: accent,
+            color: "#fff",
+            border: 0,
+            borderRadius: 8,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {copied ? "Copied!" : "Copy share link"}
+        </button>
+        <a
+          href={waHref}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            padding: "8px 14px",
+            background: "#25D366",
+            color: "#fff",
+            borderRadius: 8,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Share on WhatsApp
+        </a>
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            padding: "8px 14px",
+            background: "#eee",
+            color: "#333",
+            borderRadius: 8,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          Open PNG
         </a>
       </div>
     </div>

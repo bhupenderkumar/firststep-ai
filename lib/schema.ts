@@ -9,6 +9,7 @@ export const PlanSchema = z.object({
     .object({
       name: z.string(),
       note: z.string(),
+      note_hi: z.string().optional(),
       closed: z.boolean(),
     })
     .optional(),
@@ -17,11 +18,14 @@ export const PlanSchema = z.object({
       z.object({
         subject: z.string(),
         topic: z.string(),
+        topic_hi: z.string().optional(),
         home_tip: z.string(),
+        home_tip_hi: z.string().optional(),
       })
     )
     .min(1),
   homework: z.string(),
+  homework_hi: z.string().optional(),
   video_activity: z.object({
     title: z.string(),
     duration_sec: z.number().int().positive(),

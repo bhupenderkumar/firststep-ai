@@ -20,7 +20,7 @@ export default function ParentPoster({ plan }: { plan: Plan }) {
         height: 1754,
         background: "#FFFAF0",
         ...COL,
-        fontFamily: "Inter, Arial, sans-serif",
+        fontFamily: "Noto, Inter, Arial, sans-serif",
         color: DARK,
       }}
     >
@@ -105,6 +105,11 @@ export default function ParentPoster({ plan }: { plan: Plan }) {
           <div style={{ ...D, fontSize: 16, color: ACCENT, marginTop: 2 }}>
             {plan.festival_today.note}
           </div>
+          {plan.festival_today.note_hi ? (
+            <div style={{ ...D, fontSize: 15, color: DARK, marginTop: 1 }}>
+              {plan.festival_today.note_hi}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -162,9 +167,19 @@ export default function ParentPoster({ plan }: { plan: Plan }) {
               <div style={{ ...D, fontSize: 20, fontWeight: 700 }}>
                 {p.topic}
               </div>
-              <div style={{ ...D, fontSize: 16, color: ACCENT, marginTop: 2 }}>
+              {p.topic_hi ? (
+                <div style={{ ...D, fontSize: 17, fontWeight: 600, color: DARK, marginTop: 1 }}>
+                  {p.topic_hi}
+                </div>
+              ) : null}
+              <div style={{ ...D, fontSize: 16, color: ACCENT, marginTop: 4 }}>
                 {`Home tip: ${p.home_tip}`}
               </div>
+              {p.home_tip_hi ? (
+                <div style={{ ...D, fontSize: 15, color: DARK, marginTop: 1 }}>
+                  {`घर पर सुझाव: ${p.home_tip_hi}`}
+                </div>
+              ) : null}
             </div>
           </div>
         ))}
@@ -178,12 +193,17 @@ export default function ParentPoster({ plan }: { plan: Plan }) {
           color: DARK,
           padding: "14px 20px",
           borderRadius: 12,
-          fontSize: 20,
-          fontWeight: 700,
-          ...D,
+          ...COL,
         }}
       >
-        {`HOMEWORK: ${plan.homework}`}
+        <div style={{ ...D, fontSize: 20, fontWeight: 700 }}>
+          {`HOMEWORK: ${plan.homework}`}
+        </div>
+        {plan.homework_hi ? (
+          <div style={{ ...D, fontSize: 17, fontWeight: 600, marginTop: 2 }}>
+            {`गृहकार्य: ${plan.homework_hi}`}
+          </div>
+        ) : null}
       </div>
 
       {/* HOW PARENTS HELP */}

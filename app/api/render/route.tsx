@@ -9,6 +9,33 @@ import { A4 } from "@/lib/constants";
 
 export const runtime = "nodejs";
 
+// Cache fonts in module scope so we only fetch once per cold start.
+let fontPromise: Promise<{ name: string; data: ArrayBuffer; weight: 400 | 700 }[]> | null = null;
+function loadFonts() {
+  if (!fontPromise) {
+    fontPromise = (async () => {
+      // Resolve current TTF URLs via Google Fonts CSS API (UA trick returns TTF, not WOFF2).
+      const css = await fetch(
+        "https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&family=Noto+Sans:wght@400;700",
+        { headers: { "User-Agent": "Mozilla/5.0" }, cache: "force-cache" }
+      ).then((r) => r.text());
+      const ttfs = Array.from(css.matchAll(/https:[^)]+\.ttf/g)).map((m) => m[0]);
+      // Order from Google: NotoSans 400, NotoSans 700, NotoSansDevanagari 400, NotoSansDevanagari 700
+      const meta: { name: string; weight: 400 | 700 }[] = [
+        { name: "Noto", weight: 400 },
+        { name: "Noto", weight: 700 },
+        { name: "Noto", weight: 400 }, // same family so Devanagari falls back automatically
+        { name: "Noto", weight: 700 },
+      ];
+      const datas = await Promise.all(
+        ttfs.slice(0, 4).map((u) => fetch(u, { cache: "force-cache" }).then((r) => r.arrayBuffer()))
+      );
+      return datas.map((data, i) => ({ ...meta[i], data }));
+    })();
+  }
+  return fontPromise;
+}
+
 export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   const p = req.nextUrl.searchParams.get("p");
@@ -40,9 +67,11 @@ export async function GET(req: NextRequest) {
       <ParentPoster plan={plan} />
     );
 
+  const fonts = await loadFonts();
   return new ImageResponse(node, {
     width: A4.width,
     height: A4.height,
+    fonts: fonts.map((f) => ({ name: f.name, data: f.data, weight: f.weight, style: "normal" as const })),
     headers: { "Cache-Control": "public, max-age=86400" },
   });
 }

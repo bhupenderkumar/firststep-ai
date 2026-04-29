@@ -18,6 +18,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Compute tomorrow in IST so the model never invents a date.
+    const nowIst = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const tomorrow = new Date(nowIst);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowIso = `${tomorrow.getFullYear()}-${String(
+      tomorrow.getMonth() + 1
+    ).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+    const tomorrowWeekday = tomorrow.toLocaleDateString("en-US", {
+      weekday: "long",
+    });
+
     let rawText: string = text ?? "";
 
     if (imageBase64) {
@@ -51,14 +64,16 @@ export async function POST(req: NextRequest) {
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Class: ${className ?? "UKG - A"}\nDiary contents:\n${rawText}`,
+          content: `Class: ${className ?? "UKG - A"}\nTomorrow date (use this exact value for date_iso): ${tomorrowIso}\nTomorrow weekday: ${tomorrowWeekday}\n\nDiary contents:\n${rawText}`,
         },
       ],
     });
 
     const content = r.choices[0]?.message?.content ?? "{}";
     const json = JSON.parse(content);
-    const plan = PlanSchema.parse(json);
+    const parsed = PlanSchema.parse(json);
+    // Hard-pin the date to the server-computed tomorrow (IST) so the poster is never wrong.
+    const plan = { ...parsed, date_iso: tomorrowIso, weekday: tomorrowWeekday };
 
     const id = planId(plan);
     savePlan(id, plan);
