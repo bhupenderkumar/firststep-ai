@@ -3,6 +3,7 @@ import { groq, SYSTEM_PROMPT } from "@/lib/groq";
 import { PlanSchema } from "@/lib/schema";
 import { planId, savePlan } from "@/lib/store";
 import { encodePlan } from "@/lib/codec";
+import { createShortLink } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -79,7 +80,15 @@ export async function POST(req: NextRequest) {
     savePlan(id, plan);
     const p = encodePlan(plan);
 
-    return NextResponse.json({ id, p, plan });
+    // Create a short link via Supabase for easy sharing.
+    let shortCode: string | null = null;
+    try {
+      shortCode = await createShortLink(p, plan.class_name, plan.date_iso);
+    } catch {
+      // Non-fatal — teacher can still share the long /p/ URL.
+    }
+
+    return NextResponse.json({ id, p, plan, shortCode });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

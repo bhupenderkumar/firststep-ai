@@ -10,6 +10,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [planId, setPlanId] = useState<string | null>(null);
   const [planPayload, setPlanPayload] = useState<string | null>(null);
+  const [shortCode, setShortCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioStatus, setAudioStatus] = useState<
     "idle" | "warming" | "ready" | "failed"
@@ -46,6 +47,7 @@ export default function Home() {
     setError(null);
     setPlanId(null);
     setPlanPayload(null);
+    setShortCode(null);
     setAudioStatus("idle");
     try {
       const res = await fetch("/api/extract", {
@@ -57,6 +59,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "Failed");
       setPlanId(data.id);
       setPlanPayload(data.p);
+      setShortCode(data.shortCode || null);
       // Fire-and-forget audio pre-generation so parents get instant playback.
       warmAudio(data.p);
     } catch (e: unknown) {
@@ -139,7 +142,7 @@ export default function Home() {
             Forward it on WhatsApp.
           </p>
           <AudioStatusPill status={audioStatus} />
-          <ShareCard payload={planPayload} />
+          <ShareCard payload={planPayload} shortCode={shortCode} />
         </div>
       ) : null}
     </main>
@@ -179,25 +182,33 @@ function AudioStatusPill({
   );
 }
 
-function ShareCard({ payload }: { payload: string }) {
+function ShareCard({
+  payload,
+  shortCode,
+}: {
+  payload: string;
+  shortCode: string | null;
+}) {
   const [copied, setCopied] = useState(false);
-  const landingPath = `/p/${payload}`;
-  const fullUrl =
+  const shortPath = shortCode ? `/s/${shortCode}` : null;
+  const fallbackPath = `/p/${payload}`;
+  const sharePath = shortPath || fallbackPath;
+  const shareUrl =
     typeof window !== "undefined"
-      ? new URL(landingPath, window.location.origin).toString()
-      : landingPath;
+      ? new URL(sharePath, window.location.origin).toString()
+      : sharePath;
 
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(fullUrl);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      window.prompt("Copy this link:", fullUrl);
+      window.prompt("Copy this link:", shareUrl);
     }
   }
 
-  const waText = `Tomorrow's plan from First Step School (with audio narration):\n${fullUrl}`;
+  const waText = `Tomorrow's plan from First Step School (with audio):\n${shareUrl}`;
   const waHref = `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
   return (
@@ -213,14 +224,16 @@ function ShareCard({ payload }: { payload: string }) {
         style={{
           fontFamily: "monospace",
           background: "#F4F6FB",
-          padding: 12,
+          padding: 14,
           borderRadius: 8,
-          fontSize: 13,
+          fontSize: shortCode ? 22 : 13,
+          fontWeight: shortCode ? 700 : 400,
           wordBreak: "break-all",
           color: "#333",
+          textAlign: shortCode ? "center" : "left",
         }}
       >
-        {fullUrl}
+        {shareUrl}
       </div>
       <div
         style={{
@@ -231,7 +244,7 @@ function ShareCard({ payload }: { payload: string }) {
         }}
       >
         <a
-          href={landingPath}
+          href={sharePath}
           target="_blank"
           rel="noreferrer"
           style={{
@@ -276,8 +289,7 @@ function ShareCard({ payload }: { payload: string }) {
         </a>
       </div>
       <p style={{ fontSize: 13, color: "#666", marginTop: 12 }}>
-        Tip: the landing page works for parents (audio + simple summary) and for
-        teachers (full A4 sheets + worked example). Just one link does it all.
+        Share this short link with parents. They see audio + parent sheet only (no teacher content).
       </p>
     </div>
   );

@@ -40,19 +40,10 @@ export default function LandingClient({
   const [voice, setVoice] = useState("hannah");
   const [audioReady, setAudioReady] = useState(false);
   const [audioErr, setAudioErr] = useState<string | null>(null);
-  const [shareUrl, setShareUrl] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const audioUrl = `/api/voice?p=${payload}&voice=${voice}`;
   const parentImg = useMemo(() => `/api/render?p=${payload}&view=parent`, [payload]);
-  const teacherImg = useMemo(() => `/api/render?p=${payload}&view=teacher`, [payload]);
   const parentPdf = `/api/pdf?p=${payload}&view=parent`;
-  const teacherPdf = `/api/pdf?p=${payload}&view=teacher`;
-  const bothPdf = `/api/pdf?p=${payload}&both=1`;
-
-  useEffect(() => {
-    if (typeof window !== "undefined") setShareUrl(window.location.href);
-  }, []);
 
   // Probe whether audio is already cached. Errors get surfaced with friendly hints.
   useEffect(() => {
@@ -77,19 +68,6 @@ export default function LandingClient({
       cancelled = true;
     };
   }, [audioUrl]);
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      window.prompt("Copy this link:", shareUrl);
-    }
-  }
-
-  const waText = `${plan.class_name} - ${formatDate(plan.date_iso)} - First Step School daily plan:\n${shareUrl}`;
-  const waHref = `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
   return (
     <main
@@ -257,18 +235,6 @@ export default function LandingClient({
             <a href={parentPdf} target="_blank" rel="noreferrer" className="btn" style={{ background: PRIMARY, color: "#fff" }}>
               📄 Open Parent PDF
             </a>
-            <a href={teacherPdf} target="_blank" rel="noreferrer" className="btn" style={{ background: ACCENT, color: "#fff" }}>
-              📄 Open Teacher PDF
-            </a>
-            <a href={bothPdf} target="_blank" rel="noreferrer" className="btn" style={{ background: DARK, color: "#fff" }}>
-              📄 Both (2-page PDF)
-            </a>
-            <button onClick={copyLink} className="btn" style={{ background: "#eee", color: DARK }}>
-              {copied ? "✓ Copied" : "🔗 Copy link"}
-            </button>
-            <a href={waHref} target="_blank" rel="noreferrer" className="btn" style={{ background: "#25D366", color: "#fff" }}>
-              💬 WhatsApp
-            </a>
           </div>
         </section>
 
@@ -277,10 +243,6 @@ export default function LandingClient({
           <div className="pdf-page">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={parentImg} alt="Parent A4 sheet" />
-          </div>
-          <div className="pdf-page">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={teacherImg} alt="Teacher A4 sheet" />
           </div>
         </section>
 
