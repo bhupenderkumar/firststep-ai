@@ -110,47 +110,26 @@ export default function Home() {
 
       {planId && planPayload ? (
         <div style={{ marginTop: 32 }}>
-          <h2>Two A4 sheets ready</h2>
+          <h2>Your share link is ready ✨</h2>
           <p style={{ fontSize: 14, color: "#555" }}>
-            These links are permanent (the plan is encoded inside the URL) -
-            share them on WhatsApp or save the PNGs.
+            One link → opens a friendly landing page with audio narration,
+            English+Hindi summary, both A4 sheets, and a print-to-PDF button.
+            Forward it on WhatsApp.
           </p>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 16,
-            }}
-          >
-            <PreviewCard
-              title="For Parents (English + हिंदी)"
-              href={`/api/render?p=${planPayload}&view=parent`}
-              accent="#C02942"
-            />
-            <PreviewCard
-              title="For Teachers (with worked example)"
-              href={`/api/render?p=${planPayload}&view=teacher`}
-              accent="#185A9D"
-            />
-          </div>
+          <ShareCard payload={planPayload} />
         </div>
       ) : null}
     </main>
   );
 }
 
-function PreviewCard({
-  title,
-  href,
-  accent,
-}: {
-  title: string;
-  href: string;
-  accent: string;
-}) {
+function ShareCard({ payload }: { payload: string }) {
   const [copied, setCopied] = useState(false);
+  const landingPath = `/p/${payload}`;
   const fullUrl =
-    typeof window !== "undefined" ? new URL(href, window.location.origin).toString() : href;
+    typeof window !== "undefined"
+      ? new URL(landingPath, window.location.origin).toString()
+      : landingPath;
 
   async function copyLink() {
     try {
@@ -158,39 +137,63 @@ function PreviewCard({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Fallback: select the text
       window.prompt("Copy this link:", fullUrl);
     }
   }
 
-  const waText = `Tomorrow's plan from First Step School:\n${fullUrl}`;
+  const waText = `Tomorrow's plan from First Step School (with audio narration):\n${fullUrl}`;
   const waHref = `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
   return (
     <div
       style={{
-        border: `2px solid ${accent}`,
-        borderRadius: 12,
-        padding: 12,
+        border: "2px solid #185A9D",
+        borderRadius: 16,
+        padding: 16,
         background: "#fff",
       }}
     >
-      <div style={{ fontWeight: 800, color: accent, marginBottom: 8 }}>
-        {title}
+      <div
+        style={{
+          fontFamily: "monospace",
+          background: "#F4F6FB",
+          padding: 12,
+          borderRadius: 8,
+          fontSize: 13,
+          wordBreak: "break-all",
+          color: "#333",
+        }}
+      >
+        {fullUrl}
       </div>
-      <a href={href} target="_blank" rel="noreferrer">
-        <img
-          src={href}
-          alt={title}
-          style={{ width: "100%", border: "1px solid #ddd", borderRadius: 6 }}
-        />
-      </a>
-      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginTop: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <a
+          href={landingPath}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            padding: "10px 16px",
+            background: "#185A9D",
+            color: "#fff",
+            borderRadius: 8,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          ▶ Open landing page
+        </a>
         <button
           onClick={copyLink}
           style={{
-            padding: "8px 14px",
-            background: accent,
+            padding: "10px 16px",
+            background: "#C02942",
             color: "#fff",
             border: 0,
             borderRadius: 8,
@@ -198,14 +201,14 @@ function PreviewCard({
             cursor: "pointer",
           }}
         >
-          {copied ? "Copied!" : "Copy share link"}
+          {copied ? "✓ Copied!" : "🔗 Copy share link"}
         </button>
         <a
           href={waHref}
           target="_blank"
           rel="noreferrer"
           style={{
-            padding: "8px 14px",
+            padding: "10px 16px",
             background: "#25D366",
             color: "#fff",
             borderRadius: 8,
@@ -213,24 +216,13 @@ function PreviewCard({
             textDecoration: "none",
           }}
         >
-          Share on WhatsApp
-        </a>
-        <a
-          href={href}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            padding: "8px 14px",
-            background: "#eee",
-            color: "#333",
-            borderRadius: 8,
-            fontWeight: 700,
-            textDecoration: "none",
-          }}
-        >
-          Open PNG
+          💬 Share on WhatsApp
         </a>
       </div>
+      <p style={{ fontSize: 13, color: "#666", marginTop: 12 }}>
+        Tip: the landing page works for parents (audio + simple summary) and for
+        teachers (full A4 sheets + worked example). Just one link does it all.
+      </p>
     </div>
   );
 }
