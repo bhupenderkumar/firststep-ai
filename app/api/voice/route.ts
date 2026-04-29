@@ -10,6 +10,49 @@ export const maxDuration = 60;
 
 const ORPHEUS_MAX = 180; // safe under 200-char hard limit
 
+// ─── TTS provider configs ───
+// We try PlayAI first (higher daily token limit on Groq), fall back to Orpheus
+// only if PlayAI fails (rate-limit, terms not accepted, etc). Both share the
+// same GROQ_API_KEY but have SEPARATE quota buckets, so this doubles effective
+// daily capacity on top of the Supabase audio cache.
+type TtsProvider = {
+  id: "playai" | "orpheus";
+  model: string;
+  // Map our friendly UI voice id → provider's voice name.
+  voiceMap: Record<string, string>;
+  defaultVoice: string;
+};
+
+const PLAYAI: TtsProvider = {
+  id: "playai",
+  model: "playai-tts",
+  defaultVoice: "Celeste-PlayAI",
+  voiceMap: {
+    hannah: "Celeste-PlayAI",   // warm, gentle female
+    autumn: "Cheyenne-PlayAI",  // bright, friendly female
+    diana: "Eleanor-PlayAI",    // mature, kind female
+    daniel: "Atlas-PlayAI",     // calm, steady male
+    austin: "Mason-PlayAI",     // clear, friendly male
+    troy: "Thunder-PlayAI",     // deep, expressive male
+  },
+};
+
+const ORPHEUS: TtsProvider = {
+  id: "orpheus",
+  model: "canopylabs/orpheus-v1-english",
+  defaultVoice: "hannah",
+  voiceMap: {
+    hannah: "hannah",
+    autumn: "autumn",
+    diana: "diana",
+    daniel: "daniel",
+    austin: "austin",
+    troy: "troy",
+  },
+};
+
+const PROVIDERS: TtsProvider[] = [PLAYAI, ORPHEUS];
+
 const NARRATION_SYSTEM = `You are "Miss Riya", a warm, kind teacher at First Step School - Saurabh Vihar.
 Write a friendly spoken-word audio script (no headings, no markdown, no asterisks, no emojis, no stage directions).
 
@@ -135,7 +178,12 @@ function concatWavs(wavs: Buffer[]): Buffer {
   return out;
 }
 
-async function synthChunk(text: string, voice: string): Promise<Buffer> {
+async function synthChunk(
+  text: string,
+  uiVoice: string,
+  provider: TtsProvider
+): Promise<Buffer> {
+  const voice = provider.voiceMap[uiVoice] || provider.defaultVoice;
   const r = await fetch("https://api.groq.com/openai/v1/audio/speech", {
     method: "POST",
     headers: {
@@ -143,17 +191,24 @@ async function synthChunk(text: string, voice: string): Promise<Buffer> {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "canopylabs/orpheus-v1-english",
+      model: provider.model,
       voice,
       input: text,
       response_format: "wav",
     }),
   });
   if (!r.ok) {
-    throw new Error(`TTS ${r.status}: ${await r.text()}`);
+    throw new Error(`TTS ${r.status} [${provider.id}]: ${await r.text()}`);
   }
   const ab = await r.arrayBuffer();
   return Buffer.from(ab);
+}
+
+// Detect which errors are worth trying the next provider for.
+function shouldFallover(errMsg: string): boolean {
+  return /rate.?limit|429|tokens? per day|tpd|terms|model_not_found|model_terms_required|insufficient_quota|service tier/i.test(
+    errMsg
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -200,47 +255,71 @@ export async function GET(req: NextRequest) {
     const chunks = chunkForTts(script);
     if (chunks.length === 0) return new Response("No chunks", { status: 500 });
 
-    // Run TTS in parallel, but cap concurrency to avoid hammering the API.
+    // Run TTS in parallel across providers (waterfall on failure).
+    // Pass 1: try PlayAI for every chunk.
+    // Pass 2: any chunk that failed Pass 1 with a quota/terms error → retry on Orpheus.
     const concurrency = 4;
-    const results: Buffer[] = new Array(chunks.length);
+    const results: Buffer[] = new Array(chunks.length).fill(Buffer.alloc(0));
+    const chunkErrors: string[] = new Array(chunks.length).fill("");
     const errors: string[] = [];
-    let next = 0;
-    async function worker() {
-      while (true) {
-        const i = next++;
-        if (i >= chunks.length) return;
-        // Try up to 2 times per chunk (transient 5xx / network blips).
-        let lastErr: unknown = null;
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            results[i] = await synthChunk(chunks[i], voice);
-            lastErr = null;
-            break;
-          } catch (e) {
-            lastErr = e;
-            await new Promise((r) => setTimeout(r, 400));
+    let usedProvider: TtsProvider["id"] = "playai";
+
+    async function runPass(provider: TtsProvider, indices: number[]) {
+      let next = 0;
+      async function worker() {
+        while (true) {
+          const k = next++;
+          if (k >= indices.length) return;
+          const i = indices[k];
+          let lastErr: unknown = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              results[i] = await synthChunk(chunks[i], voice, provider);
+              lastErr = null;
+              break;
+            } catch (e) {
+              lastErr = e;
+              await new Promise((r) => setTimeout(r, 400));
+            }
+          }
+          if (lastErr) {
+            chunkErrors[i] = lastErr instanceof Error ? lastErr.message : String(lastErr);
+            errors.push(chunkErrors[i]);
+          } else {
+            chunkErrors[i] = "";
           }
         }
-        if (lastErr) {
-          results[i] = Buffer.alloc(0);
-          errors.push(lastErr instanceof Error ? lastErr.message : String(lastErr));
-        }
       }
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, indices.length) }, worker)
+      );
     }
-    await Promise.all(
-      Array.from({ length: Math.min(concurrency, chunks.length) }, worker)
-    );
+
+    // Pass 1: PlayAI for everything.
+    await runPass(PROVIDERS[0], chunks.map((_, i) => i));
+
+    // Identify chunks that failed in a way that's worth retrying on Orpheus.
+    const needsRetry = chunkErrors
+      .map((err, i) => ({ err, i }))
+      .filter(({ err }) => err && shouldFallover(err))
+      .map(({ i }) => i);
+
+    if (needsRetry.length > 0) {
+      // Pass 2: Orpheus only for the chunks PlayAI couldn't handle.
+      await runPass(PROVIDERS[1], needsRetry);
+      usedProvider = "orpheus";
+    }
 
     const valid = results.filter((b) => b.length > 100);
     // If MORE than 1/3 of chunks failed, refuse — partial audio is confusing.
     if (valid.length === 0 || valid.length < Math.ceil(chunks.length * 0.66)) {
       const firstErr = errors[0] || "TTS returned empty audio";
       const isRateLimit = /rate.?limit|429|tokens? per day|tpd/i.test(firstErr);
-      const isTerms = /terms|accept/i.test(firstErr);
+      const isTerms = /terms|accept|model_terms_required/i.test(firstErr);
       const hint = isTerms
-        ? " (Hint: accept Orpheus TTS terms at https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english)"
+        ? " (Hint: a Groq org admin must accept terms for both 'playai-tts' and 'canopylabs/orpheus-v1-english' at https://console.groq.com/playground)"
         : isRateLimit
-        ? " (Daily quota reached — the device's built-in voice will read the script instead.)"
+        ? " (Daily quota reached on both providers — the device's built-in voice will read the script instead.)"
         : "";
       return new Response(`${firstErr}${hint}`, {
         status: isRateLimit ? 429 : 502,
@@ -266,6 +345,7 @@ export async function GET(req: NextRequest) {
         "Cache-Control": "public, max-age=604800, s-maxage=604800, immutable",
         "Content-Disposition": `inline; filename="firststep-${plan.class_name.replace(/\s+/g, "_")}-${plan.date_iso}.wav"`,
         "X-Cache": "MISS",
+        "X-Voice-Provider": usedProvider,
       },
     });
   } catch (err: unknown) {
