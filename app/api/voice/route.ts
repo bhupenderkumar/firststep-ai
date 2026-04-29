@@ -182,11 +182,21 @@ export async function GET(req: NextRequest) {
       while (true) {
         const i = next++;
         if (i >= chunks.length) return;
-        try {
-          results[i] = await synthChunk(chunks[i], voice);
-        } catch (e) {
+        // Try up to 2 times per chunk (transient 5xx / network blips).
+        let lastErr: unknown = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            results[i] = await synthChunk(chunks[i], voice);
+            lastErr = null;
+            break;
+          } catch (e) {
+            lastErr = e;
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        }
+        if (lastErr) {
           results[i] = Buffer.alloc(0);
-          errors.push(e instanceof Error ? e.message : String(e));
+          errors.push(lastErr instanceof Error ? lastErr.message : String(lastErr));
         }
       }
     }
@@ -195,10 +205,13 @@ export async function GET(req: NextRequest) {
     );
 
     const valid = results.filter((b) => b.length > 100);
-    if (valid.length === 0) {
-      // Surface the upstream error so the UI can show actionable guidance.
+    // If MORE than 1/3 of chunks failed, refuse — partial audio is confusing.
+    if (valid.length === 0 || valid.length < Math.ceil(chunks.length * 0.66)) {
       const firstErr = errors[0] || "TTS returned empty audio";
-      return new Response(firstErr, {
+      const hint = /terms|accept/i.test(firstErr)
+        ? " (Hint: accept Orpheus TTS terms at https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english)"
+        : "";
+      return new Response(`${firstErr}${hint}`, {
         status: 502,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });

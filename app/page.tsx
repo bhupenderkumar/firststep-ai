@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CLASS_OPTIONS } from "@/lib/constants";
 
+const ADMIN_KEY_STORAGE = "firststep_admin_key_v1";
+
 export default function Home() {
+  const [adminKey, setAdminKey] = useState<string>("");
+  const [adminKeyDraft, setAdminKeyDraft] = useState<string>("");
   const [className, setClassName] = useState<string>(CLASS_OPTIONS[1]); // KG
   const [text, setText] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -15,6 +19,27 @@ export default function Home() {
   const [audioStatus, setAudioStatus] = useState<
     "idle" | "warming" | "ready" | "failed"
   >("idle");
+
+  useEffect(() => {
+    const saved =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem(ADMIN_KEY_STORAGE)
+        : null;
+    if (saved) setAdminKey(saved);
+  }, []);
+
+  function saveAdminKey() {
+    const k = adminKeyDraft.trim();
+    if (!k) return;
+    window.localStorage.setItem(ADMIN_KEY_STORAGE, k);
+    setAdminKey(k);
+    setAdminKeyDraft("");
+  }
+
+  function clearAdminKey() {
+    window.localStorage.removeItem(ADMIN_KEY_STORAGE);
+    setAdminKey("");
+  }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -52,11 +77,19 @@ export default function Home() {
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-admin-key": adminKey,
+        },
         body: JSON.stringify({ className, text, imageBase64 }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed");
+      if (!res.ok) {
+        if (res.status === 401) {
+          clearAdminKey();
+        }
+        throw new Error(data.error || "Failed");
+      }
       setPlanId(data.id);
       setPlanPayload(data.p);
       setShortCode(data.shortCode || null);
@@ -72,11 +105,82 @@ export default function Home() {
   return (
     <main style={{ maxWidth: 960, margin: "40px auto", padding: 24 }}>
       <h1 style={{ color: "#C02942" }}>First Step School - Daily Plan</h1>
+      {!adminKey ? (
+        <div
+          style={{
+            border: "2px solid #C02942",
+            borderRadius: 14,
+            padding: 24,
+            background: "#FFF4E6",
+            marginTop: 24,
+          }}
+        >
+          <h2 style={{ marginTop: 0, color: "#C02942" }}>Staff login</h2>
+          <p style={{ color: "#444" }}>
+            Only school staff can generate daily plans. Enter the admin
+            password shared with you. (Parents do <strong>not</strong> need a
+            password — they just open the share link.)
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              type="password"
+              value={adminKeyDraft}
+              onChange={(e) => setAdminKeyDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveAdminKey();
+              }}
+              placeholder="Admin password"
+              style={{
+                flex: 1,
+                minWidth: 220,
+                padding: 12,
+                fontSize: 16,
+                borderRadius: 8,
+                border: "1px solid #ccc",
+              }}
+            />
+            <button
+              onClick={saveAdminKey}
+              disabled={!adminKeyDraft.trim()}
+              style={{
+                padding: "12px 24px",
+                background: "#C02942",
+                color: "#fff",
+                border: 0,
+                borderRadius: 8,
+                fontWeight: 700,
+                fontSize: 16,
+                cursor: "pointer",
+              }}
+            >
+              Unlock
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
       <p>
         Upload tomorrow&apos;s diary photo or paste the topics. Groq generates
         two A4 PDFs / PNGs - one for parents, one for teachers (with worked
         example for substitute teachers).
       </p>
+      <div style={{ fontSize: 12, color: "#666", marginTop: -8 }}>
+        ✓ Logged in as staff.{" "}
+        <button
+          onClick={clearAdminKey}
+          style={{
+            background: "none",
+            border: 0,
+            color: "#185A9D",
+            cursor: "pointer",
+            textDecoration: "underline",
+            padding: 0,
+            fontSize: 12,
+          }}
+        >
+          Sign out
+        </button>
+      </div>
 
       <label style={{ display: "block", marginTop: 16 }}>
         <div style={{ fontWeight: 700 }}>Class</div>
@@ -145,6 +249,8 @@ export default function Home() {
           <ShareCard payload={planPayload} shortCode={shortCode} />
         </div>
       ) : null}
+        </>
+      )}
     </main>
   );
 }
@@ -189,89 +295,108 @@ function ShareCard({
   payload: string;
   shortCode: string | null;
 }) {
-  const [copied, setCopied] = useState(false);
-  const shortPath = shortCode ? `/s/${shortCode}` : null;
-  const fallbackPath = `/p/${payload}`;
-  const sharePath = shortPath || fallbackPath;
-  const shareUrl =
-    typeof window !== "undefined"
-      ? new URL(sharePath, window.location.origin).toString()
-      : sharePath;
+  const [copiedKey, setCopiedKey] = useState<"" | "parent" | "teacher">("");
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-  async function copyLink() {
+  const parentPath = shortCode ? `/s/${shortCode}` : `/p/${payload}`;
+  const teacherPath = shortCode
+    ? `/t/${shortCode}`
+    : `/api/pdf?p=${payload}&view=teacher`;
+  const parentUrl = origin ? `${origin}${parentPath}` : parentPath;
+  const teacherUrl = origin ? `${origin}${teacherPath}` : teacherPath;
+
+  async function copy(url: string, which: "parent" | "teacher") {
     try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(url);
+      setCopiedKey(which);
+      setTimeout(() => setCopiedKey(""), 1500);
     } catch {
-      window.prompt("Copy this link:", shareUrl);
+      window.prompt("Copy this link:", url);
     }
   }
 
-  const waText = `Tomorrow's plan from First Step School (with audio):\n${shareUrl}`;
-  const waHref = `https://wa.me/?text=${encodeURIComponent(waText)}`;
+  const parentWaText = `🌟 Tomorrow's plan from First Step School (with audio narration in English + Hindi):\n${parentUrl}`;
+  const teacherWaText = `📄 Tomorrow's teacher A4 sheet — First Step School (substitute-teacher ready):\n${teacherUrl}`;
+  const parentWa = `https://wa.me/?text=${encodeURIComponent(parentWaText)}`;
+  const teacherWa = `https://wa.me/?text=${encodeURIComponent(teacherWaText)}`;
 
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <ShareBlock
+        title="👨‍👩‍👧 Share with PARENTS"
+        subtitle="Audio narration + simple bilingual summary. No teacher content."
+        url={parentUrl}
+        path={parentPath}
+        waHref={parentWa}
+        accent="#C02942"
+        onCopy={() => copy(parentUrl, "parent")}
+        copied={copiedKey === "parent"}
+        openLabel="▶ Preview parent page"
+      />
+      <ShareBlock
+        title="🧑‍🏫 Share with TEACHERS"
+        subtitle="Full teacher A4 PDF with worked example for substitute teachers."
+        url={teacherUrl}
+        path={teacherPath}
+        waHref={teacherWa}
+        accent="#185A9D"
+        onCopy={() => copy(teacherUrl, "teacher")}
+        copied={copiedKey === "teacher"}
+        openLabel="📄 Open teacher PDF"
+      />
+    </div>
+  );
+}
+
+function ShareBlock({
+  title,
+  subtitle,
+  url,
+  path,
+  waHref,
+  accent,
+  onCopy,
+  copied,
+  openLabel,
+}: {
+  title: string;
+  subtitle: string;
+  url: string;
+  path: string;
+  waHref: string;
+  accent: string;
+  onCopy: () => void;
+  copied: boolean;
+  openLabel: string;
+}) {
   return (
     <div
       style={{
-        border: "2px solid #185A9D",
+        border: `2px solid ${accent}`,
         borderRadius: 16,
         padding: 16,
         background: "#fff",
       }}
     >
+      <div style={{ fontWeight: 800, fontSize: 18, color: accent }}>{title}</div>
+      <div style={{ fontSize: 13, color: "#555", marginTop: 4 }}>{subtitle}</div>
       <div
         style={{
           fontFamily: "monospace",
           background: "#F4F6FB",
-          padding: 14,
+          padding: 12,
           borderRadius: 8,
-          fontSize: shortCode ? 22 : 13,
-          fontWeight: shortCode ? 700 : 400,
+          fontSize: 16,
+          fontWeight: 700,
           wordBreak: "break-all",
           color: "#333",
-          textAlign: shortCode ? "center" : "left",
+          marginTop: 10,
+          textAlign: "center",
         }}
       >
-        {shareUrl}
+        {url}
       </div>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          marginTop: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <a
-          href={sharePath}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            padding: "10px 16px",
-            background: "#185A9D",
-            color: "#fff",
-            borderRadius: 8,
-            fontWeight: 700,
-            textDecoration: "none",
-          }}
-        >
-          ▶ Open landing page
-        </a>
-        <button
-          onClick={copyLink}
-          style={{
-            padding: "10px 16px",
-            background: "#C02942",
-            color: "#fff",
-            border: 0,
-            borderRadius: 8,
-            fontWeight: 700,
-            cursor: "pointer",
-          }}
-        >
-          {copied ? "✓ Copied!" : "🔗 Copy share link"}
-        </button>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         <a
           href={waHref}
           target="_blank"
@@ -287,10 +412,37 @@ function ShareCard({
         >
           💬 Share on WhatsApp
         </a>
+        <button
+          onClick={onCopy}
+          style={{
+            padding: "10px 16px",
+            background: accent,
+            color: "#fff",
+            border: 0,
+            borderRadius: 8,
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          {copied ? "✓ Copied!" : "🔗 Copy link"}
+        </button>
+        <a
+          href={path}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            padding: "10px 16px",
+            background: "#fff",
+            color: accent,
+            border: `2px solid ${accent}`,
+            borderRadius: 8,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
+        >
+          {openLabel}
+        </a>
       </div>
-      <p style={{ fontSize: 13, color: "#666", marginTop: 12 }}>
-        Share this short link with parents. They see audio + parent sheet only (no teacher content).
-      </p>
     </div>
   );
 }

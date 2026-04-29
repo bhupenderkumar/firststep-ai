@@ -10,6 +10,19 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
+    // ─────────── AUTH GATE ───────────
+    // Only authenticated school staff can spend Groq credits.
+    const expected = process.env.ADMIN_PASSWORD;
+    if (expected) {
+      const provided = req.headers.get("x-admin-key") || "";
+      if (provided !== expected) {
+        return NextResponse.json(
+          { error: "Unauthorized. Enter the admin password to generate plans." },
+          { status: 401 }
+        );
+      }
+    }
+
     const { imageBase64, text, className } = await req.json();
 
     if (!imageBase64 && !text) {

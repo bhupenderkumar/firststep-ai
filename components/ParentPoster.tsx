@@ -20,7 +20,7 @@ export default function ParentPoster({ plan }: { plan: Plan }) {
         height: 1754,
         background: "#FFFAF0",
         ...COL,
-        fontFamily: "Noto, Inter, Arial, sans-serif",
+        fontFamily: "Noto, NotoDev, Inter, Arial, sans-serif",
         color: DARK,
       }}
     >
