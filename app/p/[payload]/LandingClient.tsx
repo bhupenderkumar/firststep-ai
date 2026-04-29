@@ -252,13 +252,33 @@ export default function LandingClient({
             style={{
               color: PRIMARY,
               marginTop: 12,
-              padding: 10,
+              padding: 12,
               background: "#FFE9EC",
               borderRadius: 8,
               fontSize: 14,
             }}
           >
-            {audioErr}
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              ⚠️ Audio not available yet
+            </div>
+            {audioErr.includes("terms") || audioErr.includes("model_terms") ? (
+              <div>
+                The text-to-speech model needs a one-time terms acceptance by
+                the Groq org admin.{" "}
+                <a
+                  href="https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: ACCENT, fontWeight: 700 }}
+                >
+                  Click here to accept terms
+                </a>{" "}
+                (login as the Groq org admin), then come back and click
+                Generate again.
+              </div>
+            ) : (
+              <div style={{ wordBreak: "break-word" }}>{audioErr}</div>
+            )}
           </div>
         ) : null}
 

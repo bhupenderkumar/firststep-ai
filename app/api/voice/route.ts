@@ -164,6 +164,7 @@ export async function GET(req: NextRequest) {
     // Run TTS in parallel, but cap concurrency to avoid hammering the API.
     const concurrency = 4;
     const results: Buffer[] = new Array(chunks.length);
+    const errors: string[] = [];
     let next = 0;
     async function worker() {
       while (true) {
@@ -171,8 +172,9 @@ export async function GET(req: NextRequest) {
         if (i >= chunks.length) return;
         try {
           results[i] = await synthChunk(chunks[i], voice);
-        } catch {
+        } catch (e) {
           results[i] = Buffer.alloc(0);
+          errors.push(e instanceof Error ? e.message : String(e));
         }
       }
     }
@@ -180,8 +182,16 @@ export async function GET(req: NextRequest) {
       Array.from({ length: Math.min(concurrency, chunks.length) }, worker)
     );
 
-    const wav = concatWavs(results.filter((b) => b.length > 100));
-    if (wav.length === 0) return new Response("TTS produced no audio", { status: 502 });
+    const valid = results.filter((b) => b.length > 100);
+    if (valid.length === 0) {
+      // Surface the upstream error so the UI can show actionable guidance.
+      const firstErr = errors[0] || "TTS returned empty audio";
+      return new Response(firstErr, {
+        status: 502,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    const wav = concatWavs(valid);
 
     return new Response(new Uint8Array(wav), {
       headers: {
