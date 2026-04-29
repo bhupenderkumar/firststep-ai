@@ -5,16 +5,15 @@ import type { Plan } from "@/lib/schema";
 
 const PRIMARY = "#C02942";
 const ACCENT = "#185A9D";
-const GOLD = "#F2B705";
 const DARK = "#28283C";
 
 const VOICES = [
-  { id: "hannah", label: "Miss Hannah (warm)" },
-  { id: "autumn", label: "Miss Autumn (bright)" },
-  { id: "diana", label: "Miss Diana (clear)" },
-  { id: "daniel", label: "Mr. Daniel (calm)" },
-  { id: "austin", label: "Mr. Austin (friendly)" },
-  { id: "troy", label: "Mr. Troy (confident)" },
+  { id: "hannah", label: "Miss Hannah" },
+  { id: "autumn", label: "Miss Autumn" },
+  { id: "diana", label: "Miss Diana" },
+  { id: "daniel", label: "Mr. Daniel" },
+  { id: "austin", label: "Mr. Austin" },
+  { id: "troy", label: "Mr. Troy" },
 ];
 
 function formatDate(iso: string) {
@@ -39,45 +38,45 @@ export default function LandingClient({
   payload: string;
 }) {
   const [voice, setVoice] = useState("hannah");
-  const [audioLoading, setAudioLoading] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioReady, setAudioReady] = useState(false);
   const [audioErr, setAudioErr] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
 
+  const audioUrl = `/api/voice?p=${payload}&voice=${voice}`;
+  const parentImg = useMemo(() => `/api/render?p=${payload}&view=parent`, [payload]);
+  const teacherImg = useMemo(() => `/api/render?p=${payload}&view=teacher`, [payload]);
+  const parentPdf = `/api/pdf?p=${payload}&view=parent`;
+  const teacherPdf = `/api/pdf?p=${payload}&view=teacher`;
+  const bothPdf = `/api/pdf?p=${payload}&both=1`;
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setShareUrl(window.location.href);
-    }
+    if (typeof window !== "undefined") setShareUrl(window.location.href);
   }, []);
 
-  const parentImg = useMemo(
-    () => `/api/render?p=${payload}&view=parent`,
-    [payload]
-  );
-  const teacherImg = useMemo(
-    () => `/api/render?p=${payload}&view=teacher`,
-    [payload]
-  );
-
-  async function generateAudio() {
-    setAudioLoading(true);
+  // Probe whether audio is already cached. Errors get surfaced with friendly hints.
+  useEffect(() => {
+    let cancelled = false;
+    setAudioReady(false);
     setAudioErr(null);
-    setAudioUrl(null);
-    try {
-      const res = await fetch(`/api/voice?p=${payload}&voice=${voice}`);
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+    (async () => {
+      try {
+        const r = await fetch(audioUrl, { cache: "force-cache" });
+        if (cancelled) return;
+        if (r.ok && (r.headers.get("content-type") || "").includes("audio")) {
+          setAudioReady(true);
+        } else if (!r.ok) {
+          const text = await r.text();
+          setAudioErr(text || `HTTP ${r.status}`);
+        }
+      } catch (e) {
+        if (!cancelled) setAudioErr(e instanceof Error ? e.message : "load failed");
       }
-      const blob = await res.blob();
-      setAudioUrl(URL.createObjectURL(blob));
-    } catch (e) {
-      setAudioErr(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setAudioLoading(false);
-    }
-  }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [audioUrl]);
 
   async function copyLink() {
     try {
@@ -89,420 +88,214 @@ export default function LandingClient({
     }
   }
 
-  const waText = `${plan.class_name} - ${formatDate(plan.date_iso)} - First Step School daily plan (with audio narration):\n${shareUrl}`;
+  const waText = `${plan.class_name} - ${formatDate(plan.date_iso)} - First Step School daily plan:\n${shareUrl}`;
   const waHref = `https://wa.me/?text=${encodeURIComponent(waText)}`;
 
   return (
     <main
       style={{
-        maxWidth: 980,
-        margin: "0 auto",
-        padding: "24px 16px 80px",
-        fontFamily:
-          "system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif",
+        background: "#EDEEF1",
+        minHeight: "100vh",
+        padding: "20px 12px 60px",
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif",
         color: DARK,
       }}
     >
-      {/* Print-only style: hide non-essentials, scale poster to A4 */}
       <style jsx global>{`
         @media print {
-          .no-print {
-            display: none !important;
-          }
-          body {
-            background: #fff !important;
-          }
-          .print-poster {
-            width: 100% !important;
+          .no-print { display: none !important; }
+          body { background: #fff !important; }
+          .pdf-page {
+            box-shadow: none !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
             page-break-after: always;
-            display: block !important;
           }
-          @page {
-            size: A4 portrait;
-            margin: 8mm;
-          }
+          @page { size: A4 portrait; margin: 0; }
         }
         .btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 18px;
-          border-radius: 10px;
-          font-weight: 700;
-          text-decoration: none;
-          border: 0;
-          cursor: pointer;
-          font-size: 16px;
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 12px 18px; border-radius: 10px;
+          font-weight: 700; font-size: 15px;
+          text-decoration: none; border: 0; cursor: pointer;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+          transition: transform 0.05s ease;
         }
+        .btn:active { transform: translateY(1px); }
+        .pdf-page {
+          background: #fff;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+          border-radius: 8px;
+          overflow: hidden;
+          aspect-ratio: 1240 / 1754;
+          width: 100%;
+          max-width: 900px;
+          margin: 0 auto;
+        }
+        .pdf-page img { width: 100%; height: 100%; display: block; object-fit: contain; }
       `}</style>
 
-      {/* HERO */}
-      <section
-        className="no-print"
-        style={{
-          background: `linear-gradient(135deg, ${PRIMARY}, ${ACCENT})`,
-          color: "#fff",
-          padding: "28px 24px",
-          borderRadius: 20,
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ fontSize: 14, opacity: 0.9, letterSpacing: 1 }}>
-          FIRST STEP SCHOOL - SAURABH VIHAR
-        </div>
-        <h1 style={{ fontSize: 36, margin: "8px 0 6px", lineHeight: 1.2 }}>
-          {plan.class_name} - Tomorrow&apos;s Plan
-        </h1>
-        <div style={{ fontSize: 20, fontWeight: 600 }}>
-          {formatDate(plan.date_iso)}
-        </div>
-        {plan.festival_today ? (
-          <div
-            style={{
-              marginTop: 14,
-              background: GOLD,
-              color: DARK,
-              padding: "10px 14px",
-              borderRadius: 10,
-              fontWeight: 700,
-              display: "inline-block",
-            }}
-          >
-            🎉 {plan.festival_today.name} -{" "}
-            {plan.festival_today.closed
-              ? "School CLOSED"
-              : "School open as usual"}
-          </div>
-        ) : null}
-      </section>
-
-      {/* AUDIO NARRATION */}
-      <section
-        className="no-print"
-        style={{
-          background: "#fff",
-          border: `2px solid ${ACCENT}`,
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 20,
-        }}
-      >
-        <div
+      <div style={{ maxWidth: 980, margin: "0 auto" }}>
+        {/* Top control bar */}
+        <section
+          className="no-print"
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            marginBottom: 6,
+            background: "#fff",
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 18,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
           }}
         >
-          <span style={{ fontSize: 28 }}>🎧</span>
-          <h2 style={{ margin: 0, color: ACCENT, fontSize: 22 }}>
-            Listen with your child
-          </h2>
-        </div>
-        <p style={{ margin: "4px 0 14px", color: "#555", fontSize: 15 }}>
-          A friendly teacher reads tomorrow&apos;s plan to BOTH parent and
-          child. Each subject is explained simply, with a fun fact and a home
-          activity. Hindi words are sprinkled in so children learn both
-          languages. Perfect at bedtime.
-        </p>
-
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 10,
-            alignItems: "center",
-          }}
-        >
-          <label style={{ fontSize: 14, fontWeight: 700 }}>Voice:</label>
-          <select
-            value={voice}
-            onChange={(e) => setVoice(e.target.value)}
-            disabled={audioLoading}
-            style={{
-              padding: "10px 12px",
-              fontSize: 15,
-              borderRadius: 8,
-              border: "1px solid #ccc",
-            }}
-          >
-            {VOICES.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={generateAudio}
-            disabled={audioLoading}
-            className="btn"
-            style={{ background: ACCENT, color: "#fff" }}
-          >
-            {audioLoading
-              ? "Generating audio... (15-30s)"
-              : audioUrl
-              ? "Re-generate"
-              : "▶ Generate audio narration"}
-          </button>
-        </div>
-
-        {audioErr ? (
           <div
             style={{
-              color: PRIMARY,
-              marginTop: 12,
-              padding: 12,
-              background: "#FFE9EC",
-              borderRadius: 8,
-              fontSize: 14,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+              marginBottom: 12,
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>
-              ⚠️ Audio not available yet
-            </div>
-            {audioErr.includes("terms") || audioErr.includes("model_terms") ? (
-              <div>
-                The text-to-speech model needs a one-time terms acceptance by
-                the Groq org admin.{" "}
-                <a
-                  href="https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english"
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: ACCENT, fontWeight: 700 }}
-                >
-                  Click here to accept terms
-                </a>{" "}
-                (login as the Groq org admin), then come back and click
-                Generate again.
+            <div>
+              <div style={{ fontSize: 12, color: "#888", letterSpacing: 1 }}>
+                FIRST STEP SCHOOL - SAURABH VIHAR
               </div>
-            ) : (
-              <div style={{ wordBreak: "break-word" }}>{audioErr}</div>
-            )}
-          </div>
-        ) : null}
-
-        {audioUrl ? (
-          <div style={{ marginTop: 16 }}>
-            <audio
-              key={audioUrl}
-              controls
-              autoPlay
-              src={audioUrl}
-              style={{ width: "100%" }}
-            />
-            <a
-              href={audioUrl}
-              download={`firststep-${plan.class_name.replace(
-                /\s+/g,
-                "_"
-              )}-${plan.date_iso}.wav`}
+              <div style={{ fontSize: 20, fontWeight: 800, color: PRIMARY }}>
+                {plan.class_name} - {formatDate(plan.date_iso)}
+              </div>
+            </div>
+            <select
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
               style={{
-                display: "inline-block",
-                marginTop: 8,
-                color: ACCENT,
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #ccc",
                 fontSize: 14,
               }}
+              title="Choose a voice"
             >
-              ⬇ Download audio (.wav)
-            </a>
+              {VOICES.map((v) => (
+                <option key={v.id} value={v.id}>{v.label}</option>
+              ))}
+            </select>
           </div>
-        ) : null}
-      </section>
 
-      {/* QUICK SUMMARY */}
-      <section
-        className="no-print"
-        style={{
-          background: "#FFFAF0",
-          border: `2px solid ${PRIMARY}`,
-          borderRadius: 16,
-          padding: 20,
-          marginBottom: 20,
-        }}
-      >
-        <h2 style={{ margin: 0, color: PRIMARY, fontSize: 22 }}>
-          📚 What we&apos;ll learn tomorrow
-        </h2>
-        <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-          {plan.parents.map((p, i) => (
+          {/* AUDIO PLAYER - browser/CDN cache makes repeat plays instant */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: 12,
+              background: "#F4F6FB",
+              borderRadius: 10,
+              border: `1px solid ${audioReady ? "#cfe5cf" : "#e0e0e0"}`,
+              marginBottom: 10,
+            }}
+          >
+            <span style={{ fontSize: 22 }}>🎧</span>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>
+                Listen with your child
+              </div>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                {audioReady
+                  ? "Ready - press play. Hindi words included for kids."
+                  : audioErr
+                  ? "Audio unavailable - read the sheets below."
+                  : "Loading audio (first time may take 20-30s)..."}
+              </div>
+            </div>
+          </div>
+          <audio
+            key={audioUrl}
+            controls
+            preload="auto"
+            src={audioUrl}
+            style={{ width: "100%" }}
+            onCanPlay={() => setAudioReady(true)}
+            onError={() => {
+              if (!audioErr) setAudioErr("Audio could not load");
+            }}
+          />
+
+          {audioErr && audioErr.toLowerCase().includes("term") ? (
             <div
-              key={i}
               style={{
-                background: "#fff",
-                borderRadius: 10,
-                padding: 14,
-                borderLeft: `6px solid ${PRIMARY}`,
+                marginTop: 10,
+                padding: 10,
+                background: "#FFE9EC",
+                color: PRIMARY,
+                borderRadius: 8,
+                fontSize: 13,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "baseline",
-                  gap: 8,
-                }}
+              ⚠️ The TTS model needs a one-time terms acceptance.{" "}
+              <a
+                href="https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english"
+                target="_blank"
+                rel="noreferrer"
+                style={{ color: ACCENT, fontWeight: 700 }}
               >
-                <span
-                  style={{
-                    background: PRIMARY,
-                    color: "#fff",
-                    padding: "3px 10px",
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    fontSize: 13,
-                  }}
-                >
-                  {p.subject}
-                </span>
-                <strong style={{ fontSize: 17 }}>{p.topic}</strong>
-                {p.topic_hi ? (
-                  <span style={{ color: "#555", fontSize: 16 }}>
-                    ({p.topic_hi})
-                  </span>
-                ) : null}
-              </div>
-              <div style={{ marginTop: 6, color: ACCENT, fontSize: 14 }}>
-                💡 Home tip: {p.home_tip}
-              </div>
-              {p.home_tip_hi ? (
-                <div style={{ color: "#444", fontSize: 14 }}>
-                  💡 घर पर सुझाव: {p.home_tip_hi}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
-        <div
-          style={{
-            marginTop: 14,
-            background: GOLD,
-            padding: "10px 14px",
-            borderRadius: 10,
-            fontWeight: 700,
-          }}
-        >
-          📝 Homework: {plan.homework}
-          {plan.homework_hi ? (
-            <div style={{ fontWeight: 600, marginTop: 2 }}>
-              गृहकार्य: {plan.homework_hi}
+                Accept here
+              </a>{" "}
+              (Groq org admin), then refresh.
             </div>
           ) : null}
-        </div>
-      </section>
 
-      {/* ACTIONS */}
-      <section
-        className="no-print"
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 10,
-          marginBottom: 24,
-        }}
-      >
-        <a
-          href={parentImg}
-          target="_blank"
-          rel="noreferrer"
-          className="btn"
-          style={{ background: PRIMARY, color: "#fff" }}
-        >
-          📄 Open Parent A4 (new tab)
-        </a>
-        <a
-          href={teacherImg}
-          target="_blank"
-          rel="noreferrer"
-          className="btn"
-          style={{ background: ACCENT, color: "#fff" }}
-        >
-          📄 Open Teacher A4 (new tab)
-        </a>
-        <button
-          onClick={() => window.print()}
-          className="btn"
-          style={{ background: DARK, color: "#fff" }}
-        >
-          🖨 Print as PDF
-        </button>
-        <button
-          onClick={copyLink}
-          className="btn"
-          style={{ background: "#eee", color: DARK }}
-        >
-          {copied ? "✓ Copied" : "🔗 Copy share link"}
-        </button>
-        <a
-          href={waHref}
-          target="_blank"
-          rel="noreferrer"
-          className="btn"
-          style={{ background: "#25D366", color: "#fff" }}
-        >
-          💬 Share on WhatsApp
-        </a>
-      </section>
+          {/* ACTION BUTTONS */}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              marginTop: 14,
+            }}
+          >
+            <a href={parentPdf} target="_blank" rel="noreferrer" className="btn" style={{ background: PRIMARY, color: "#fff" }}>
+              📄 Open Parent PDF
+            </a>
+            <a href={teacherPdf} target="_blank" rel="noreferrer" className="btn" style={{ background: ACCENT, color: "#fff" }}>
+              📄 Open Teacher PDF
+            </a>
+            <a href={bothPdf} target="_blank" rel="noreferrer" className="btn" style={{ background: DARK, color: "#fff" }}>
+              📄 Both (2-page PDF)
+            </a>
+            <button onClick={copyLink} className="btn" style={{ background: "#eee", color: DARK }}>
+              {copied ? "✓ Copied" : "🔗 Copy link"}
+            </button>
+            <a href={waHref} target="_blank" rel="noreferrer" className="btn" style={{ background: "#25D366", color: "#fff" }}>
+              💬 WhatsApp
+            </a>
+          </div>
+        </section>
 
-      {/* INLINE POSTERS (also used by print) */}
-      <section style={{ display: "grid", gap: 16 }}>
-        <div
-          className="print-poster"
+        {/* PDF-LIKE POSTER PAGES */}
+        <section style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+          <div className="pdf-page">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={parentImg} alt="Parent A4 sheet" />
+          </div>
+          <div className="pdf-page">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={teacherImg} alt="Teacher A4 sheet" />
+          </div>
+        </section>
+
+        <footer
+          className="no-print"
           style={{
-            background: "#fff",
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            padding: 8,
+            marginTop: 36,
+            color: "#888",
+            fontSize: 12,
+            textAlign: "center",
           }}
         >
-          <div
-            className="no-print"
-            style={{ fontWeight: 700, color: PRIMARY, marginBottom: 6 }}
-          >
-            Parent Sheet
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={parentImg}
-            alt="Parent A4 sheet"
-            style={{ width: "100%", display: "block", borderRadius: 6 }}
-          />
-        </div>
-        <div
-          className="print-poster"
-          style={{
-            background: "#fff",
-            borderRadius: 12,
-            border: "1px solid #ddd",
-            padding: 8,
-          }}
-        >
-          <div
-            className="no-print"
-            style={{ fontWeight: 700, color: ACCENT, marginBottom: 6 }}
-          >
-            Teacher Sheet (with worked example)
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={teacherImg}
-            alt="Teacher A4 sheet"
-            style={{ width: "100%", display: "block", borderRadius: 6 }}
-          />
-        </div>
-      </section>
-
-      <footer
-        className="no-print"
-        style={{
-          marginTop: 40,
-          color: "#888",
-          fontSize: 13,
-          textAlign: "center",
-        }}
-      >
-        First Step School - Saurabh Vihar - With love from your teachers ❤️
-      </footer>
+          First Step School - Saurabh Vihar - With love from your teachers
+        </footer>
+      </div>
     </main>
   );
 }

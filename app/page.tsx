@@ -11,6 +11,9 @@ export default function Home() {
   const [planId, setPlanId] = useState<string | null>(null);
   const [planPayload, setPlanPayload] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [audioStatus, setAudioStatus] = useState<
+    "idle" | "warming" | "ready" | "failed"
+  >("idle");
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -22,11 +25,28 @@ export default function Home() {
     setImageBase64(b64);
   }
 
+  async function warmAudio(p: string) {
+    setAudioStatus("warming");
+    try {
+      // Warm CDN cache for the default voice. Subsequent landing-page loads
+      // will hit Vercel's edge cache and play instantly.
+      const r = await fetch(`/api/voice?p=${p}&voice=hannah`);
+      if (r.ok && (r.headers.get("content-type") || "").includes("audio")) {
+        setAudioStatus("ready");
+      } else {
+        setAudioStatus("failed");
+      }
+    } catch {
+      setAudioStatus("failed");
+    }
+  }
+
   async function generate() {
     setLoading(true);
     setError(null);
     setPlanId(null);
     setPlanPayload(null);
+    setAudioStatus("idle");
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -37,6 +57,8 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "Failed");
       setPlanId(data.id);
       setPlanPayload(data.p);
+      // Fire-and-forget audio pre-generation so parents get instant playback.
+      warmAudio(data.p);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -116,10 +138,44 @@ export default function Home() {
             English+Hindi summary, both A4 sheets, and a print-to-PDF button.
             Forward it on WhatsApp.
           </p>
+          <AudioStatusPill status={audioStatus} />
           <ShareCard payload={planPayload} />
         </div>
       ) : null}
     </main>
+  );
+}
+
+function AudioStatusPill({
+  status,
+}: {
+  status: "idle" | "warming" | "ready" | "failed";
+}) {
+  if (status === "idle") return null;
+  const map = {
+    warming: { bg: "#FFF4D6", color: "#7A5B00", text: "🎧 Pre-generating audio for parents… (20–30s)" },
+    ready: { bg: "#DDF5DD", color: "#246B36", text: "✓ Audio ready – parents will hear instant playback when they open the link." },
+    failed: {
+      bg: "#FFE9EC",
+      color: "#A11A30",
+      text: "⚠️ Audio pre-generation failed (TTS terms?). Parents can still read the sheets; audio will retry on open.",
+    },
+  } as const;
+  const s = map[status];
+  return (
+    <div
+      style={{
+        background: s.bg,
+        color: s.color,
+        padding: "10px 14px",
+        borderRadius: 10,
+        marginBottom: 12,
+        fontSize: 14,
+        fontWeight: 600,
+      }}
+    >
+      {s.text}
+    </div>
   );
 }
 
