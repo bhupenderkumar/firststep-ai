@@ -172,12 +172,51 @@ export default function ParentPoster({ plan }: { plan: Plan }) {
                   {p.topic_hi}
                 </div>
               ) : null}
+              {p.explanation ? (
+                <div style={{ ...D, fontSize: 15, color: DARK, marginTop: 4, lineHeight: 1.35 }}>
+                  {p.explanation}
+                </div>
+              ) : null}
+              {p.explanation_hi ? (
+                <div style={{ ...D, fontSize: 14, color: "#444", marginTop: 1, lineHeight: 1.35 }}>
+                  {p.explanation_hi}
+                </div>
+              ) : null}
+              {p.examples && p.examples.length > 0 ? (
+                <div
+                  style={{
+                    ...COL,
+                    background: "#FFFDF5",
+                    border: "1px solid #E8D9A8",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    marginTop: 6,
+                  }}
+                >
+                  <div style={{ ...D, fontSize: 13, fontWeight: 700, color: PRIMARY }}>
+                    Examples:
+                  </div>
+                  {p.examples.slice(0, 5).map((ex, j) => (
+                    <div key={j} style={{ ...D, fontSize: 14, color: DARK, marginTop: 1 }}>
+                      {`• ${ex}`}
+                      {p.examples_hi && p.examples_hi[j]
+                        ? `   |   ${p.examples_hi[j]}`
+                        : ""}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <div style={{ ...D, fontSize: 16, color: ACCENT, marginTop: 4 }}>
                 {`Home tip: ${p.home_tip}`}
               </div>
               {p.home_tip_hi ? (
                 <div style={{ ...D, fontSize: 15, color: DARK, marginTop: 1 }}>
                   {`घर पर सुझाव: ${p.home_tip_hi}`}
+                </div>
+              ) : null}
+              {p.fun_fact ? (
+                <div style={{ ...D, fontSize: 14, color: "#7A5B00", marginTop: 3, fontStyle: "italic" }}>
+                  {`Fun fact: ${p.fun_fact}`}
                 </div>
               ) : null}
             </div>

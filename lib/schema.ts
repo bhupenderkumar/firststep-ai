@@ -21,6 +21,11 @@ export const PlanSchema = z.object({
         topic_hi: z.string().optional(),
         home_tip: z.string(),
         home_tip_hi: z.string().optional(),
+        explanation: z.string().optional(),
+        explanation_hi: z.string().optional(),
+        examples: z.array(z.string()).optional(),
+        examples_hi: z.array(z.string()).optional(),
+        fun_fact: z.string().optional(),
       })
     )
     .min(1),

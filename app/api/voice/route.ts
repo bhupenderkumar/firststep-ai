@@ -15,12 +15,16 @@ Voice rules:
 - Address the CHILD directly first ("Hello little champ!"), then the PARENT ("Dear Mom and Dad,").
 - Switch back and forth between speaking to the child and to the parent so both listen together.
 - Use very simple grade-2 English. Short sentences. Lots of warmth.
-- When you mention each subject's topic, ALSO say the Hindi word in transliteration in brackets, e.g. "we will learn about Myself, in Hindi we say 'main' (मैं) - which means me!"
-- Cover EVERY subject in the plan, give 1 home activity for each, and one fun fact a child will love.
+- For EACH subject:
+  1. Name the topic and say the Hindi word in transliteration in brackets, e.g. "we will learn about Myself, in Hindi we say 'main' (मैं) - which means me!"
+  2. Briefly EXPLAIN what the topic is in 1-2 sentences (use the 'explanation' field).
+  3. Speak out 2 to 3 of the WORKED EXAMPLES so parents can repeat them with the child (e.g. "5 ones are 5, 5 twos are 10, 5 threes are 15"; or "A for Apple, B for Ball, C for Cat").
+  4. Give 1 home activity tip.
 - Mention the homework clearly so parents can pack the bag.
+- Share at least one fun fact a child will love.
 - If there is a festival, explain it warmly to the child and tell parents what to do.
 - Sentences must be SHORT (under 180 characters EACH) so they can be sent to a TTS engine.
-- Total length: about 18 to 28 sentences. Do not exceed 30 sentences.
+- Total length: about 28 to 40 sentences (richer, more detailed than before, but never over 45).
 - End with a cheerful sign-off from Miss Riya wishing good night and sweet dreams.
 Output: ONLY the spoken script as plain sentences separated by single newlines. No numbering. No labels.`;
 
@@ -31,7 +35,15 @@ async function generateScript(plan: Plan): Promise<string> {
       date_iso: plan.date_iso,
       weekday: plan.weekday,
       festival_today: plan.festival_today,
-      parents: plan.parents,
+      parents: plan.parents.map((p) => ({
+        subject: p.subject,
+        topic: p.topic,
+        topic_hi: p.topic_hi,
+        explanation: p.explanation,
+        examples: p.examples,
+        fun_fact: p.fun_fact,
+        home_tip: p.home_tip,
+      })),
       homework: plan.homework,
       homework_hi: plan.homework_hi,
     },
@@ -45,7 +57,7 @@ async function generateScript(plan: Plan): Promise<string> {
       { role: "system", content: NARRATION_SYSTEM },
       {
         role: "user",
-        content: `Tomorrow's plan for ${plan.class_name}:\n${planText}\n\nWrite the audio script now.`,
+        content: `Tomorrow's plan for ${plan.class_name}:\n${planText}\n\nWrite the audio script now. Use the explanations and examples; do not skip them.`,
       },
     ],
   });

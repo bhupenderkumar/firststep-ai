@@ -18,7 +18,12 @@ type Plan = {
     subject: string;
     topic: string;
     topic_hi: string;            // Hindi (Devanagari) translation of topic
-    home_tip: string;
+    explanation: string;         // 2-3 sentence kid-friendly explanation of WHAT this topic actually is, with simple language. Fill gaps the diary may have missed.
+    explanation_hi: string;      // Hindi (Devanagari) version of explanation
+    examples: string[];          // 3-5 concrete WORKED examples a parent can show the child (e.g. for "Table of 5": ["5 x 1 = 5", "5 x 2 = 10", ...]; for "Aa to Zz": ["A for Apple", "B for Ball", ...]; for "Myself": ["My name is ___", "I am 5 years old", ...])
+    examples_hi: string[];       // Hindi (Devanagari) versions of the same examples (transliterate numbers/letters; keep math symbols)
+    fun_fact: string;            // 1-line fun fact a 5-year-old will love about this topic
+    home_tip: string;            // 1-line home revision tip
     home_tip_hi: string;         // Hindi (Devanagari) translation of home_tip
   }>;
   homework: string;              // 1-line summary in English
@@ -38,7 +43,12 @@ Rules:
 - school field MUST be exactly "First Step School - Saurabh Vihar".
 - date_iso MUST be exactly the "Tomorrow date" given in the user message. weekday MUST match it.
 - Use child-friendly English at grade-2 reading level for the parents section.
-- Provide Hindi (Devanagari script, NOT Hinglish/romanised) for every *_hi field. Keep Hindi simple and respectful.
+- BE GENEROUS WITH DETAIL. The diary photo/text is often a SHORT teacher shorthand (e.g. just "Math - Table of 5" or "EVS - Myself"). Your job is to ENRICH it: write a clear kid-friendly explanation, and PROVIDE 3-5 CONCRETE WORKED EXAMPLES so a parent who never went to school can still help. Examples are mandatory and must be specific to the topic (not generic).
+  - For tables/numbers: list the actual products (5x1=5, 5x2=10, ...).
+  - For alphabets/phonics: give "A for Apple, B for Ball, ..." with at least 4 letters.
+  - For body parts/myself/family: give actual sample sentences ("My name is ___", "I have two eyes", ...).
+  - For festivals/EVS: give 2-3 facts plus 1-2 questions a parent can ask.
+- Provide Hindi (Devanagari script, NOT Hinglish/romanised) for every *_hi field including examples_hi (keep numerals/math operators unchanged; transliterate letters).
 - Always include a video activity that LINKS at least 2 subjects from the day.
 - If diary mentions a festival (e.g. Buddha Purnima, Diwali, Holi), populate
   festival_today and set closed appropriately for Indian school calendar.
