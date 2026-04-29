@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { CLASS_OPTIONS } from "@/lib/constants";
 
 export default function Home() {
-  const [className, setClassName] = useState("UKG - A");
+  const [className, setClassName] = useState<string>(CLASS_OPTIONS[1]); // KG
   const [text, setText] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,32 +42,44 @@ export default function Home() {
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "40px auto", padding: 24 }}>
+    <main style={{ maxWidth: 960, margin: "40px auto", padding: 24 }}>
       <h1 style={{ color: "#C02942" }}>First Step School - Daily Plan</h1>
-      <p>Upload tomorrow&apos;s diary photo or paste the topics. Groq does the rest.</p>
+      <p>
+        Upload tomorrow&apos;s diary photo or paste the topics. Groq generates
+        two A4 PDFs / PNGs - one for parents, one for teachers (with worked
+        example for substitute teachers).
+      </p>
 
       <label style={{ display: "block", marginTop: 16 }}>
-        <div>Class</div>
-        <input
+        <div style={{ fontWeight: 700 }}>Class</div>
+        <select
           value={className}
           onChange={(e) => setClassName(e.target.value)}
           style={{ width: "100%", padding: 10, fontSize: 16 }}
-        />
+        >
+          {CLASS_OPTIONS.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label style={{ display: "block", marginTop: 16 }}>
-        <div>Diary photo (optional)</div>
+        <div style={{ fontWeight: 700 }}>Diary photo (optional)</div>
         <input type="file" accept="image/*" onChange={onFile} />
       </label>
 
       <label style={{ display: "block", marginTop: 16 }}>
-        <div>Or type the topics</div>
+        <div style={{ fontWeight: 700 }}>Or type the topics</div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={6}
           style={{ width: "100%", padding: 10, fontSize: 16 }}
-          placeholder={"EVS - Myself\nEnglish - Aa to Zz\nMath - Table of 5\nComputer - Parts of Computer"}
+          placeholder={
+            "EVS - Myself\nEnglish - Aa to Zz\nMath - Table of 5\nComputer - Parts of Computer"
+          }
         />
       </label>
 
@@ -88,23 +101,70 @@ export default function Home() {
         {loading ? "Generating..." : "Generate Plan"}
       </button>
 
-      {error ? <div style={{ color: "#C02942", marginTop: 16 }}>{error}</div> : null}
+      {error ? (
+        <div style={{ color: "#C02942", marginTop: 16 }}>{error}</div>
+      ) : null}
 
       {planId ? (
         <div style={{ marginTop: 32 }}>
-          <h2>Preview</h2>
-          <a href={`/api/render?id=${planId}`} target="_blank" rel="noreferrer">
-            <img
-              src={`/api/render?id=${planId}`}
-              alt="Plan preview"
-              style={{ width: "100%", border: "1px solid #ddd", borderRadius: 8 }}
+          <h2>Two A4 sheets ready</h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 16,
+            }}
+          >
+            <PreviewCard
+              title="For Parents"
+              href={`/api/render?id=${planId}&view=parent`}
+              accent="#C02942"
             />
-          </a>
-          <p>
-            Direct PNG: <code>/api/render?id={planId}</code>
-          </p>
+            <PreviewCard
+              title="For Teachers (with worked example)"
+              href={`/api/render?id=${planId}&view=teacher`}
+              accent="#185A9D"
+            />
+          </div>
         </div>
       ) : null}
     </main>
+  );
+}
+
+function PreviewCard({
+  title,
+  href,
+  accent,
+}: {
+  title: string;
+  href: string;
+  accent: string;
+}) {
+  return (
+    <div
+      style={{
+        border: `2px solid ${accent}`,
+        borderRadius: 12,
+        padding: 12,
+        background: "#fff",
+      }}
+    >
+      <div style={{ fontWeight: 800, color: accent, marginBottom: 8 }}>
+        {title}
+      </div>
+      <a href={href} target="_blank" rel="noreferrer">
+        <img
+          src={href}
+          alt={title}
+          style={{ width: "100%", border: "1px solid #ddd", borderRadius: 6 }}
+        />
+      </a>
+      <div style={{ marginTop: 8 }}>
+        <a href={href} target="_blank" rel="noreferrer">
+          Open / Download A4 PNG
+        </a>
+      </div>
+    </div>
   );
 }

@@ -60,7 +60,7 @@ Teacher → Next.js (Vercel) → Groq Vision + LLM → @vercel/og → PNG → Wh
 
 ## Models
 
-- Vision OCR: `llama-3.2-90b-vision-preview`
+- Vision OCR: `meta-llama/llama-4-scout-17b-16e-instruct`
 - Structuring: `llama-3.3-70b-versatile`
 
 ## License
