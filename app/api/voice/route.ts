@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createHash } from "crypto";
-import { groq } from "@/lib/groq";
+import { geminiText } from "@/lib/gemini";
 import { decodePlan } from "@/lib/codec";
 import { PlanSchema, type Plan } from "@/lib/schema";
 import { fetchCachedAudio, uploadCachedAudio } from "@/lib/supabase";
@@ -95,18 +95,11 @@ async function generateScript(plan: Plan): Promise<string> {
     null,
     2
   );
-  const r = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    temperature: 0.7,
-    messages: [
-      { role: "system", content: NARRATION_SYSTEM },
-      {
-        role: "user",
-        content: `Tomorrow's plan for ${plan.class_name}:\n${planText}\n\nWrite the audio script now. Use the explanations and examples; do not skip them.`,
-      },
-    ],
-  });
-  return r.choices[0]?.message?.content?.trim() ?? "";
+  return geminiText(
+    NARRATION_SYSTEM,
+    `Tomorrow's plan for ${plan.class_name}:\n${planText}\n\nWrite the audio script now. Use the explanations and examples; do not skip them.`,
+    { temperature: 0.7 }
+  );
 }
 
 // Split a long script into TTS-safe chunks (<= 180 chars), preferring sentence boundaries.

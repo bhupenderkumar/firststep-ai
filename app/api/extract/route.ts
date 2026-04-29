@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { groq, SYSTEM_PROMPT } from "@/lib/groq";
+import { SYSTEM_PROMPT } from "@/lib/groq";
+import { geminiJson, geminiVision } from "@/lib/gemini";
 import { PlanSchema } from "@/lib/schema";
 import { planId, savePlan } from "@/lib/store";
 import { encodePlan } from "@/lib/codec";
@@ -48,42 +49,20 @@ export async function POST(req: NextRequest) {
     let rawText: string = text ?? "";
 
     if (imageBase64) {
-      const v = await groq.chat.completions.create({
-        model: "meta-llama/llama-4-scout-17b-16e-instruct",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Read this teacher's diary page verbatim. Keep subject labels, lists, and the date if visible.",
-              },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
-                },
-              },
-            ],
-          },
-        ],
-      });
-      rawText = v.choices[0]?.message?.content ?? "";
+      // Gemini 2.0 Flash handles vision OCR natively.
+      rawText = await geminiVision(
+        "Read this teacher's diary page verbatim. Keep subject labels, lists, and the date if visible. Output plain text only.",
+        imageBase64,
+        "image/jpeg"
+      );
     }
 
-    const r = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Class: ${className ?? "UKG - A"}\nTomorrow date (use this exact value for date_iso): ${tomorrowIso}\nTomorrow weekday: ${tomorrowWeekday}\n\nDiary contents:\n${rawText}`,
-        },
-      ],
-    });
+    const content = await geminiJson(
+      SYSTEM_PROMPT,
+      `Class: ${className ?? "UKG - A"}\nTomorrow date (use this exact value for date_iso): ${tomorrowIso}\nTomorrow weekday: ${tomorrowWeekday}\n\nDiary contents:\n${rawText}`,
+      { temperature: 0.4 }
+    );
 
-    const content = r.choices[0]?.message?.content ?? "{}";
     const json = JSON.parse(content);
     const parsed = PlanSchema.parse(json);
     // Hard-pin the date to the server-computed tomorrow (IST) so the poster is never wrong.
