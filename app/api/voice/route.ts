@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
+import { createHash } from "crypto";
 import { groq } from "@/lib/groq";
 import { decodePlan } from "@/lib/codec";
 import { PlanSchema, type Plan } from "@/lib/schema";
+import { fetchCachedAudio, uploadCachedAudio } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -166,6 +168,31 @@ export async function GET(req: NextRequest) {
     return new Response("Invalid plan payload", { status: 400 });
   }
 
+  // Cache key: short hash of (payload + voice). Stable per plan/voice combo.
+  const cacheKey =
+    createHash("sha256").update(`${voice}|${p}`).digest("hex").slice(0, 24) +
+    ".wav";
+
+  // 1) Cache hit → serve directly. Saves Groq quota dramatically.
+  try {
+    const cached = await fetchCachedAudio(cacheKey);
+    if (cached && cached.bytes.length > 1000) {
+      const ab = cached.bytes.buffer.slice(
+        cached.bytes.byteOffset,
+        cached.bytes.byteOffset + cached.bytes.byteLength
+      ) as ArrayBuffer;
+      return new Response(ab, {
+        headers: {
+          "Content-Type": cached.contentType,
+          "Cache-Control": "public, max-age=604800, s-maxage=604800, immutable",
+          "X-Cache": "HIT",
+        },
+      });
+    }
+  } catch {
+    // ignore — fall through to generation
+  }
+
   try {
     const script = await generateScript(plan);
     if (!script) return new Response("Empty script", { status: 500 });
@@ -208,21 +235,37 @@ export async function GET(req: NextRequest) {
     // If MORE than 1/3 of chunks failed, refuse — partial audio is confusing.
     if (valid.length === 0 || valid.length < Math.ceil(chunks.length * 0.66)) {
       const firstErr = errors[0] || "TTS returned empty audio";
-      const hint = /terms|accept/i.test(firstErr)
+      const isRateLimit = /rate.?limit|429|tokens? per day|tpd/i.test(firstErr);
+      const isTerms = /terms|accept/i.test(firstErr);
+      const hint = isTerms
         ? " (Hint: accept Orpheus TTS terms at https://console.groq.com/playground?model=canopylabs%2Forpheus-v1-english)"
+        : isRateLimit
+        ? " (Daily quota reached — the device's built-in voice will read the script instead.)"
         : "";
       return new Response(`${firstErr}${hint}`, {
-        status: 502,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
+        status: isRateLimit ? 429 : 502,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Voice-Fallback": isRateLimit || isTerms ? "browser-tts" : "none",
+        },
       });
     }
     const wav = concatWavs(valid);
+    const wavBytes = new Uint8Array(wav);
 
-    return new Response(new Uint8Array(wav), {
+    // 2) Save to cache (best-effort, non-blocking on failure).
+    uploadCachedAudio(cacheKey, wavBytes, "audio/wav").catch(() => {});
+
+    const outAb = wavBytes.buffer.slice(
+      wavBytes.byteOffset,
+      wavBytes.byteOffset + wavBytes.byteLength
+    ) as ArrayBuffer;
+    return new Response(outAb, {
       headers: {
         "Content-Type": "audio/wav",
         "Cache-Control": "public, max-age=604800, s-maxage=604800, immutable",
         "Content-Disposition": `inline; filename="firststep-${plan.class_name.replace(/\s+/g, "_")}-${plan.date_iso}.wav"`,
+        "X-Cache": "MISS",
       },
     });
   } catch (err: unknown) {

@@ -53,3 +53,41 @@ export async function resolveShortLink(
   if (error || !data) return null;
   return data.payload;
 }
+
+// ─────────── Audio cache (Storage bucket: audio-cache) ───────────
+
+const AUDIO_BUCKET = "audio-cache";
+
+/** Fetch cached audio bytes for a key, or null if missing. */
+export async function fetchCachedAudio(
+  key: string
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  const { data, error } = await supabase.storage.from(AUDIO_BUCKET).download(key);
+  if (error || !data) return null;
+  const ab = await data.arrayBuffer();
+  return {
+    bytes: new Uint8Array(ab),
+    contentType: data.type || "audio/wav",
+  };
+}
+
+/** Upload audio bytes for a key. Idempotent (upsert). Non-fatal on failure. */
+export async function uploadCachedAudio(
+  key: string,
+  bytes: Uint8Array,
+  contentType = "audio/wav"
+): Promise<boolean> {
+  try {
+    const { error } = await supabase.storage
+      .from(AUDIO_BUCKET)
+      .upload(key, bytes, { contentType, upsert: true });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/** Get the public URL for a cached audio key (bucket is public). */
+export function publicAudioUrl(key: string): string {
+  return supabase.storage.from(AUDIO_BUCKET).getPublicUrl(key).data.publicUrl;
+}

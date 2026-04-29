@@ -40,10 +40,20 @@ export default function LandingClient({
   const [voice, setVoice] = useState("hannah");
   const [audioReady, setAudioReady] = useState(false);
   const [audioErr, setAudioErr] = useState<string | null>(null);
+  const [browserTtsState, setBrowserTtsState] = useState<
+    "idle" | "loading" | "speaking" | "paused" | "done" | "error"
+  >("idle");
+  const [browserTtsAvailable, setBrowserTtsAvailable] = useState(false);
 
   const audioUrl = `/api/voice?p=${payload}&voice=${voice}`;
   const parentImg = useMemo(() => `/api/render?p=${payload}&view=parent`, [payload]);
   const parentPdf = `/api/pdf?p=${payload}&view=parent`;
+
+  useEffect(() => {
+    setBrowserTtsAvailable(
+      typeof window !== "undefined" && "speechSynthesis" in window
+    );
+  }, []);
 
   // Probe whether audio is already cached. Errors get surfaced with friendly hints.
   useEffect(() => {
@@ -68,6 +78,84 @@ export default function LandingClient({
       cancelled = true;
     };
   }, [audioUrl]);
+
+  // Speak the narration script using the device's built-in voice.
+  // This works on every modern phone/tablet, is free, and works offline once
+  // the script is loaded. Falls back automatically when Groq is rate-limited.
+  async function speakWithBrowser() {
+    if (!("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      setBrowserTtsState("loading");
+      const r = await fetch(`/api/voice-script?p=${payload}`);
+      const data = await r.json();
+      if (!r.ok || !data.script) {
+        throw new Error(data.error || "Could not load script");
+      }
+      // Split into sentences so each utterance is short enough that mobile
+      // browsers don't truncate (Chrome on Android cuts off >~250 chars).
+      const sentences = (data.script as string)
+        .split(/\n+|(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const synth = window.speechSynthesis;
+      const allVoices = synth.getVoices();
+      // Prefer English (India) → English (US) → any English; otherwise default.
+      const preferred =
+        allVoices.find((v) => /en[-_]IN/i.test(v.lang)) ||
+        allVoices.find((v) => /^en[-_]US/i.test(v.lang)) ||
+        allVoices.find((v) => /^en/i.test(v.lang)) ||
+        allVoices[0];
+
+      setBrowserTtsState("speaking");
+      let idx = 0;
+      const next = () => {
+        if (idx >= sentences.length) {
+          setBrowserTtsState("done");
+          return;
+        }
+        const u = new SpeechSynthesisUtterance(sentences[idx++]);
+        if (preferred) u.voice = preferred;
+        u.rate = 0.95;
+        u.pitch = 1.05;
+        u.onend = next;
+        u.onerror = () => setBrowserTtsState("error");
+        synth.speak(u);
+      };
+      next();
+    } catch (e) {
+      console.error(e);
+      setBrowserTtsState("error");
+    }
+  }
+
+  function pauseResumeBrowser() {
+    if (!("speechSynthesis" in window)) return;
+    const synth = window.speechSynthesis;
+    if (synth.paused) {
+      synth.resume();
+      setBrowserTtsState("speaking");
+    } else if (synth.speaking) {
+      synth.pause();
+      setBrowserTtsState("paused");
+    }
+  }
+
+  function stopBrowser() {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    setBrowserTtsState("idle");
+  }
+
+  // Stop any in-flight browser TTS when the component unmounts or voice changes.
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   return (
     <main
@@ -182,7 +270,9 @@ export default function LandingClient({
                 {audioReady
                   ? "Ready - press play. Hindi words included for kids."
                   : audioErr
-                  ? "Audio unavailable - read the sheets below."
+                  ? browserTtsAvailable
+                    ? "Studio audio unavailable - tap 'Read aloud on this device' below."
+                    : "Audio unavailable - read the sheets below."
                   : "Loading audio (first time may take 20-30s)..."}
               </div>
             </div>
@@ -220,6 +310,88 @@ export default function LandingClient({
                 Accept here
               </a>{" "}
               (Groq org admin), then refresh.
+            </div>
+          ) : null}
+
+          {/* BROWSER TTS FALLBACK — works on every phone/tablet, free, offline. */}
+          {audioErr && browserTtsAvailable ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 12,
+                background: "#EAF3FB",
+                border: `1px solid ${ACCENT}33`,
+                borderRadius: 10,
+                fontSize: 13,
+              }}
+            >
+              <div style={{ fontWeight: 700, marginBottom: 6, color: ACCENT }}>
+                🔊 Use your device&apos;s built-in voice
+              </div>
+              <div style={{ color: "#555", marginBottom: 8 }}>
+                Studio audio isn&apos;t available right now. Your phone or tablet
+                can read the lesson aloud instead — works everywhere, no data needed.
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {browserTtsState === "idle" || browserTtsState === "done" || browserTtsState === "error" ? (
+                  <button
+                    type="button"
+                    onClick={speakWithBrowser}
+                    className="btn"
+                    style={{ background: ACCENT, color: "#fff" }}
+                  >
+                    ▶ Read aloud on this device
+                  </button>
+                ) : null}
+                {browserTtsState === "loading" ? (
+                  <span style={{ color: "#666" }}>Preparing script…</span>
+                ) : null}
+                {browserTtsState === "speaking" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={pauseResumeBrowser}
+                      className="btn"
+                      style={{ background: "#fff", color: ACCENT, border: `1px solid ${ACCENT}` }}
+                    >
+                      ⏸ Pause
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopBrowser}
+                      className="btn"
+                      style={{ background: "#fff", color: "#666", border: "1px solid #ccc" }}
+                    >
+                      ⏹ Stop
+                    </button>
+                  </>
+                ) : null}
+                {browserTtsState === "paused" ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={pauseResumeBrowser}
+                      className="btn"
+                      style={{ background: ACCENT, color: "#fff" }}
+                    >
+                      ▶ Resume
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopBrowser}
+                      className="btn"
+                      style={{ background: "#fff", color: "#666", border: "1px solid #ccc" }}
+                    >
+                      ⏹ Stop
+                    </button>
+                  </>
+                ) : null}
+                {browserTtsState === "error" ? (
+                  <span style={{ color: PRIMARY }}>
+                    Couldn&apos;t start the device voice. Please use the printed sheet below.
+                  </span>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
