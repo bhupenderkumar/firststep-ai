@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SYSTEM_PROMPT } from "@/lib/groq";
-import { geminiJson, geminiVision } from "@/lib/gemini";
+import { groq, SYSTEM_PROMPT } from "@/lib/groq";
+import { llmJson } from "@/lib/llm";
 import { PlanSchema } from "@/lib/schema";
 import { planId, savePlan } from "@/lib/store";
 import { encodePlan } from "@/lib/codec";
@@ -49,15 +49,24 @@ export async function POST(req: NextRequest) {
     let rawText: string = text ?? "";
 
     if (imageBase64) {
-      // Gemini 2.0 Flash handles vision OCR natively.
-      rawText = await geminiVision(
-        "Read this teacher's diary page verbatim. Keep subject labels, lists, and the date if visible. Output plain text only.",
-        imageBase64,
-        "image/jpeg"
-      );
+      // Vision OCR via Groq Llama-4 Scout (rare path — most teachers paste text).
+      const v = await groq.chat.completions.create({
+        model: "meta-llama/llama-4-scout-17b-16e-instruct",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Read this teacher's diary page verbatim. Keep subject labels, lists, and the date if visible." },
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+            ],
+          },
+        ],
+      });
+      rawText = v.choices[0]?.message?.content ?? "";
     }
 
-    const content = await geminiJson(
+    // Plan extraction via Cerebras Qwen-3-235B (excellent Hindi/English).
+    const content = await llmJson(
       SYSTEM_PROMPT,
       `Class: ${className ?? "UKG - A"}\nTomorrow date (use this exact value for date_iso): ${tomorrowIso}\nTomorrow weekday: ${tomorrowWeekday}\n\nDiary contents:\n${rawText}`,
       { temperature: 0.4 }

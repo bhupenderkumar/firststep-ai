@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
-import { geminiText } from "@/lib/gemini";
+import { llmText } from "@/lib/llm";
 import { decodePlan } from "@/lib/codec";
 import { PlanSchema, type Plan } from "@/lib/schema";
 import { supabase } from "@/lib/supabase";
@@ -48,7 +48,7 @@ async function generateScript(plan: Plan): Promise<string> {
     null,
     2
   );
-  return geminiText(
+  return llmText(
     SCRIPT_SYSTEM,
     `Tomorrow's plan for ${plan.class_name}:\n${planText}\n\nWrite the audio script now.`,
     { temperature: 0.7 }
