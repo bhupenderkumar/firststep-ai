@@ -1,0 +1,70 @@
+import { NextRequest, NextResponse } from "next/server";
+import { groq, SYSTEM_PROMPT } from "@/lib/groq";
+import { PlanSchema } from "@/lib/schema";
+import { planId, savePlan } from "@/lib/store";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+export async function POST(req: NextRequest) {
+  try {
+    const { imageBase64, text, className } = await req.json();
+
+    if (!imageBase64 && !text) {
+      return NextResponse.json(
+        { error: "Provide imageBase64 or text" },
+        { status: 400 }
+      );
+    }
+
+    let rawText: string = text ?? "";
+
+    if (imageBase64) {
+      const v = await groq.chat.completions.create({
+        model: "llama-3.2-90b-vision-preview",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Read this teacher's diary page verbatim. Keep subject labels, lists, and the date if visible.",
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/jpeg;base64,${imageBase64}`,
+                },
+              },
+            ],
+          },
+        ],
+      });
+      rawText = v.choices[0]?.message?.content ?? "";
+    }
+
+    const r = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `Class: ${className ?? "UKG - A"}\nDiary contents:\n${rawText}`,
+        },
+      ],
+    });
+
+    const content = r.choices[0]?.message?.content ?? "{}";
+    const json = JSON.parse(content);
+    const plan = PlanSchema.parse(json);
+
+    const id = planId(plan);
+    savePlan(id, plan);
+
+    return NextResponse.json({ id, plan });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
