@@ -20,6 +20,7 @@ export default function Home() {
     "idle" | "warming" | "ready" | "cached" | "rate_limited" | "failed"
   >("idle");
   const [audioStatusDetail, setAudioStatusDetail] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"generate" | "history">("generate");
 
   useEffect(() => {
     const saved =
@@ -200,6 +201,10 @@ export default function Home() {
         </button>
       </div>
 
+      <TabBar active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "generate" ? (
+        <>
       <label style={{ display: "block", marginTop: 16 }}>
         <div style={{ fontWeight: 700 }}>Class</div>
         <select
@@ -267,8 +272,12 @@ export default function Home() {
           <ShareCard payload={planPayload} shortCode={shortCode} />
         </div>
       ) : null}
+        </>
+      ) : null}
 
-      <HistoryPanel adminKey={adminKey} refreshKey={shortCode || ""} />
+      {activeTab === "history" ? (
+        <HistoryTable adminKey={adminKey} />
+      ) : null}
         </>
       )}
     </main>
@@ -480,10 +489,57 @@ function ShareBlock({
   );
 }
 
-// ─────────────── History Panel ───────────────
-// Lists the last 30 plans this school has generated. Lets staff re-share an
-// older link without regenerating, and gives a clear audit trail of what's
-// been sent to parents.
+// ─────────────── Tab Bar ───────────────
+function TabBar({
+  active,
+  onChange,
+}: {
+  active: "generate" | "history";
+  onChange: (t: "generate" | "history") => void;
+}) {
+  const tabs: { id: "generate" | "history"; label: string }[] = [
+    { id: "generate", label: "✨ Generate" },
+    { id: "history", label: "📜 History" },
+  ];
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 4,
+        borderBottom: "2px solid #eee",
+        marginTop: 20,
+        marginBottom: 8,
+      }}
+    >
+      {tabs.map((t) => {
+        const on = t.id === active;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{
+              padding: "10px 18px",
+              background: "transparent",
+              border: 0,
+              borderBottom: on ? "3px solid #C02942" : "3px solid transparent",
+              color: on ? "#C02942" : "#666",
+              fontSize: 15,
+              fontWeight: on ? 700 : 500,
+              cursor: "pointer",
+              marginBottom: -2,
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────── History Table ───────────────
+// Full audit trail of generated plans. Filterable by class, paginated, with
+// quick copy + open buttons for each share link.
 
 type HistoryRow = {
   id: string;
@@ -493,23 +549,19 @@ type HistoryRow = {
   input_preview: string | null;
 };
 
-function HistoryPanel({
-  adminKey,
-  refreshKey,
-}: {
-  adminKey: string;
-  refreshKey: string;
-}) {
-  const [open, setOpen] = useState(false);
+function HistoryTable({ adminKey }: { adminKey: string }) {
   const [rows, setRows] = useState<HistoryRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
+  const [classFilter, setClassFilter] = useState<string>("");
+  const [copied, setCopied] = useState<string>("");
 
   async function load() {
     setLoading(true);
     setErr(null);
     try {
-      const r = await fetch("/api/history?limit=30", {
+      const r = await fetch("/api/history?limit=100", {
         headers: { "x-admin-key": adminKey },
       });
       const j = await r.json();
@@ -522,65 +574,153 @@ function HistoryPanel({
     }
   }
 
-  // Auto-refresh whenever a new plan is shared.
   useEffect(() => {
-    if (open) load();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey, open]);
+  }, []);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
+  const filtered = (rows || []).filter((r) => {
+    if (classFilter && r.class_name !== classFilter) return false;
+    if (!filter.trim()) return true;
+    const q = filter.toLowerCase();
+    return (
+      r.id.toLowerCase().includes(q) ||
+      r.class_name.toLowerCase().includes(q) ||
+      r.date_iso.includes(q) ||
+      (r.input_preview || "").toLowerCase().includes(q)
+    );
+  });
+
+  const uniqueClasses = Array.from(
+    new Set((rows || []).map((r) => r.class_name))
+  ).sort();
+
+  function copy(label: string, value: string) {
+    navigator.clipboard?.writeText(value);
+    setCopied(label);
+    setTimeout(() => setCopied(""), 1500);
+  }
+
   return (
-    <div
-      style={{
-        marginTop: 40,
-        border: "1px solid #ddd",
-        borderRadius: 12,
-        background: "#fff",
-      }}
-    >
-      <button
-        onClick={() => setOpen((v) => !v)}
+    <div style={{ marginTop: 16 }}>
+      <div
         style={{
-          width: "100%",
-          textAlign: "left",
-          padding: "14px 18px",
-          background: "transparent",
-          border: 0,
-          fontSize: 16,
-          fontWeight: 700,
-          cursor: "pointer",
           display: "flex",
-          justifyContent: "space-between",
+          gap: 10,
+          flexWrap: "wrap",
           alignItems: "center",
+          marginBottom: 12,
         }}
       >
-        <span>📜 Recent plans (history)</span>
-        <span style={{ color: "#888", fontWeight: 400 }}>
-          {open ? "Hide ▾" : "Show ▸"}
+        <input
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Search class, date, code, or text…"
+          style={{
+            flex: 1,
+            minWidth: 220,
+            padding: 8,
+            fontSize: 14,
+            borderRadius: 6,
+            border: "1px solid #ccc",
+          }}
+        />
+        <select
+          value={classFilter}
+          onChange={(e) => setClassFilter(e.target.value)}
+          style={{
+            padding: 8,
+            fontSize: 14,
+            borderRadius: 6,
+            border: "1px solid #ccc",
+          }}
+        >
+          <option value="">All classes</option>
+          {uniqueClasses.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={load}
+          disabled={loading}
+          style={{
+            padding: "8px 14px",
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 6,
+            cursor: "pointer",
+            fontSize: 13,
+            fontWeight: 600,
+          }}
+        >
+          {loading ? "Loading…" : "↻ Refresh"}
+        </button>
+        <span style={{ color: "#888", fontSize: 12 }}>
+          {filtered.length} of {rows?.length ?? 0}
         </span>
-      </button>
-      {open ? (
-        <div style={{ padding: "0 18px 18px" }}>
-          {loading ? (
-            <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>
-          ) : err ? (
-            <div style={{ color: "#C02942", fontSize: 14 }}>
-              Couldn’t load history: {err}
-            </div>
-          ) : !rows || rows.length === 0 ? (
-            <div style={{ color: "#666", fontSize: 14 }}>
-              No plans generated yet.
-            </div>
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-                fontSize: 13,
-              }}
-            >
-              {rows.map((r) => {
+      </div>
+
+      {err ? (
+        <div
+          style={{
+            color: "#A11A30",
+            background: "#FFE9EC",
+            padding: 10,
+            borderRadius: 6,
+            fontSize: 14,
+          }}
+        >
+          {err}
+        </div>
+      ) : null}
+
+      <div
+        style={{
+          border: "1px solid #eee",
+          borderRadius: 10,
+          overflow: "auto",
+          background: "#fff",
+        }}
+      >
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: 13,
+            minWidth: 760,
+          }}
+        >
+          <thead>
+            <tr style={{ background: "#FAF5EB", textAlign: "left" }}>
+              <Th>When (IST)</Th>
+              <Th>Class</Th>
+              <Th>For date</Th>
+              <Th>Code</Th>
+              <Th style={{ minWidth: 220 }}>Diary preview</Th>
+              <Th style={{ textAlign: "right" }}>Actions</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && !rows ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 20, color: "#666" }}>
+                  Loading…
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 20, color: "#666" }}>
+                  {rows && rows.length > 0
+                    ? "No matches for this filter."
+                    : "No plans generated yet."}
+                </td>
+              </tr>
+            ) : (
+              filtered.map((r) => {
                 const parentUrl = `${origin}/s/${r.id}`;
                 const teacherUrl = `${origin}/t/${r.id}`;
                 const when = new Date(r.created_at).toLocaleString("en-IN", {
@@ -589,104 +729,127 @@ function HistoryPanel({
                   timeStyle: "short",
                 });
                 return (
-                  <div
+                  <tr
                     key={r.id}
-                    style={{
-                      padding: 10,
-                      border: "1px solid #eee",
-                      borderRadius: 8,
-                      background: "#FAFAFA",
-                    }}
+                    style={{ borderTop: "1px solid #f0f0f0" }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        flexWrap: "wrap",
-                        gap: 6,
-                      }}
-                    >
-                      <div>
-                        <strong>{r.class_name}</strong>
-                        <span style={{ color: "#666" }}> · {r.date_iso}</span>
-                      </div>
-                      <div style={{ color: "#888", fontSize: 12 }}>{when}</div>
-                    </div>
-                    {r.input_preview ? (
-                      <div
+                    <Td>{when}</Td>
+                    <Td>
+                      <strong>{r.class_name}</strong>
+                    </Td>
+                    <Td>{r.date_iso}</Td>
+                    <Td>
+                      <code
                         style={{
-                          color: "#555",
-                          fontSize: 12,
-                          marginTop: 4,
+                          background: "#f5f5f5",
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                        }}
+                      >
+                        {r.id}
+                      </code>
+                    </Td>
+                    <Td>
+                      <span
+                        title={r.input_preview || ""}
+                        style={{
+                          display: "inline-block",
+                          maxWidth: 280,
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
+                          verticalAlign: "middle",
+                          color: "#555",
                         }}
-                        title={r.input_preview}
                       >
-                        {r.input_preview}
-                      </div>
-                    ) : null}
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        marginTop: 6,
-                        flexWrap: "wrap",
-                      }}
-                    >
+                        {r.input_preview || "—"}
+                      </span>
+                    </Td>
+                    <Td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       <a
                         href={parentUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: "#185A9D", fontWeight: 600 }}
+                        style={{
+                          color: "#185A9D",
+                          fontWeight: 600,
+                          marginRight: 8,
+                        }}
                       >
-                        Parent link
+                        Parent
                       </a>
                       <a
                         href={teacherUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: "#185A9D", fontWeight: 600 }}
-                      >
-                        Teacher link
-                      </a>
-                      <button
-                        onClick={() => navigator.clipboard?.writeText(parentUrl)}
                         style={{
-                          background: "none",
-                          border: 0,
-                          color: "#666",
-                          cursor: "pointer",
-                          padding: 0,
-                          fontSize: 12,
+                          color: "#185A9D",
+                          fontWeight: 600,
+                          marginRight: 8,
                         }}
                       >
-                        Copy parent
+                        Teacher
+                      </a>
+                      <button
+                        onClick={() => copy(r.id, parentUrl)}
+                        style={{
+                          background: "none",
+                          border: "1px solid #ddd",
+                          borderRadius: 4,
+                          padding: "2px 8px",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          color: "#444",
+                        }}
+                      >
+                        {copied === r.id ? "✓ copied" : "Copy"}
                       </button>
-                    </div>
-                  </div>
+                    </Td>
+                  </tr>
                 );
-              })}
-            </div>
-          )}
-          <button
-            onClick={load}
-            disabled={loading}
-            style={{
-              marginTop: 12,
-              padding: "6px 12px",
-              background: "#fff",
-              border: "1px solid #ccc",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontSize: 13,
-            }}
-          >
-            Refresh
-          </button>
-        </div>
-      ) : null}
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
+  );
+}
+
+function Th({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <th
+      style={{
+        padding: "10px 12px",
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#444",
+        textTransform: "uppercase",
+        letterSpacing: 0.4,
+        ...style,
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+
+function Td({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <td style={{ padding: "10px 12px", verticalAlign: "middle", ...style }}>
+      {children}
+    </td>
   );
 }
