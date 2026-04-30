@@ -17,8 +17,9 @@ export default function Home() {
   const [shortCode, setShortCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioStatus, setAudioStatus] = useState<
-    "idle" | "warming" | "ready" | "failed"
+    "idle" | "warming" | "ready" | "cached" | "rate_limited" | "failed"
   >("idle");
+  const [audioStatusDetail, setAudioStatusDetail] = useState<string>("");
 
   useEffect(() => {
     const saved =
@@ -53,17 +54,27 @@ export default function Home() {
 
   async function warmAudio(p: string) {
     setAudioStatus("warming");
+    setAudioStatusDetail("");
     try {
-      // Warm CDN cache for the default voice. Subsequent landing-page loads
-      // will hit Vercel's edge cache and play instantly.
+      // Warm CDN + Supabase cache for the default voice. Subsequent landing-page
+      // loads will hit the cached WAV and play instantly.
       const r = await fetch(`/api/voice?p=${p}&voice=hannah`);
-      if (r.ok && (r.headers.get("content-type") || "").includes("audio")) {
-        setAudioStatus("ready");
+      const ct = r.headers.get("content-type") || "";
+      if (r.ok && ct.includes("audio")) {
+        const wasCached = r.headers.get("x-cache") === "HIT";
+        setAudioStatus(wasCached ? "cached" : "ready");
+      } else if (r.status === 429) {
+        // Daily TTS quota — parents will get the device-voice fallback. This
+        // is NOT a fatal error: the page still works perfectly.
+        setAudioStatus("rate_limited");
       } else {
+        const text = await r.text().catch(() => "");
         setAudioStatus("failed");
+        setAudioStatusDetail(text.slice(0, 200));
       }
-    } catch {
+    } catch (e) {
       setAudioStatus("failed");
+      setAudioStatusDetail(e instanceof Error ? e.message : "network error");
     }
   }
 
@@ -74,6 +85,7 @@ export default function Home() {
     setPlanPayload(null);
     setShortCode(null);
     setAudioStatus("idle");
+    setAudioStatusDetail("");
     try {
       const res = await fetch("/api/extract", {
         method: "POST",
@@ -245,7 +257,7 @@ export default function Home() {
             English+Hindi summary, both A4 sheets, and a print-to-PDF button.
             Forward it on WhatsApp.
           </p>
-          <AudioStatusPill status={audioStatus} />
+          <AudioStatusPill status={audioStatus} detail={audioStatusDetail} />
           <ShareCard payload={planPayload} shortCode={shortCode} />
         </div>
       ) : null}
@@ -257,17 +269,25 @@ export default function Home() {
 
 function AudioStatusPill({
   status,
+  detail,
 }: {
-  status: "idle" | "warming" | "ready" | "failed";
+  status: "idle" | "warming" | "ready" | "cached" | "rate_limited" | "failed";
+  detail?: string;
 }) {
   if (status === "idle") return null;
   const map = {
-    warming: { bg: "#FFF4D6", color: "#7A5B00", text: "🎧 Pre-generating audio for parents… (20–30s)" },
+    warming: { bg: "#FFF4D6", color: "#7A5B00", text: "🎧 Pre-generating audio for parents… (20–30s on first time, instant if cached)" },
     ready: { bg: "#DDF5DD", color: "#246B36", text: "✓ Audio ready – parents will hear instant playback when they open the link." },
+    cached: { bg: "#DDF5DD", color: "#246B36", text: "✓ Audio served from cache – instant playback for parents." },
+    rate_limited: {
+      bg: "#E8F0FA",
+      color: "#1E3A8A",
+      text: "ℹ️ Studio voice is rate-limited today. Parents will see a 'Read aloud on this device' button that uses the phone's built-in voice — free, works on every device.",
+    },
     failed: {
       bg: "#FFE9EC",
       color: "#A11A30",
-      text: "⚠️ Audio pre-generation failed (TTS terms?). Parents can still read the sheets; audio will retry on open.",
+      text: "⚠️ Audio pre-generation hit an issue. Parents can still read the sheets and use the device-voice fallback button.",
     },
   } as const;
   const s = map[status];
@@ -284,6 +304,11 @@ function AudioStatusPill({
       }}
     >
       {s.text}
+      {detail && status === "failed" ? (
+        <div style={{ fontSize: 12, fontWeight: 400, marginTop: 4, opacity: 0.9 }}>
+          Detail: {detail}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -55,20 +55,25 @@ export default function LandingClient({
     );
   }, []);
 
-  // Probe whether audio is already cached. Errors get surfaced with friendly hints.
+  // Lightweight HEAD check to detect rate-limit / failure BEFORE the <audio>
+  // element fires its (non-descriptive) onError. We use HEAD instead of GET
+  // so we don't double-download the WAV bytes that the audio element will
+  // also fetch. A 200 means cached/ready; 429 means studio voice is rate-
+  // limited (fall back to device voice); other 5xx is a real failure.
   useEffect(() => {
     let cancelled = false;
     setAudioReady(false);
     setAudioErr(null);
     (async () => {
       try {
-        const r = await fetch(audioUrl, { cache: "force-cache" });
+        const r = await fetch(audioUrl, { method: "HEAD" });
         if (cancelled) return;
         if (r.ok && (r.headers.get("content-type") || "").includes("audio")) {
           setAudioReady(true);
+        } else if (r.status === 429) {
+          setAudioErr("rate_limited");
         } else if (!r.ok) {
-          const text = await r.text();
-          setAudioErr(text || `HTTP ${r.status}`);
+          setAudioErr(`HTTP ${r.status}`);
         }
       } catch (e) {
         if (!cancelled) setAudioErr(e instanceof Error ? e.message : "load failed");
@@ -269,6 +274,10 @@ export default function LandingClient({
               <div style={{ fontSize: 12, color: "#666" }}>
                 {audioReady
                   ? "Ready - press play. Hindi words included for kids."
+                  : audioErr === "rate_limited"
+                  ? browserTtsAvailable
+                    ? "Studio voice is busy today — tap 'Read aloud on this device' below for free playback."
+                    : "Studio voice is busy today. Read the sheets below."
                   : audioErr
                   ? browserTtsAvailable
                     ? "Studio audio unavailable - tap 'Read aloud on this device' below."
@@ -277,17 +286,19 @@ export default function LandingClient({
               </div>
             </div>
           </div>
-          <audio
-            key={audioUrl}
-            controls
-            preload="auto"
-            src={audioUrl}
-            style={{ width: "100%" }}
-            onCanPlay={() => setAudioReady(true)}
-            onError={() => {
-              if (!audioErr) setAudioErr("Audio could not load");
-            }}
-          />
+          {audioErr === "rate_limited" ? null : (
+            <audio
+              key={audioUrl}
+              controls
+              preload="auto"
+              src={audioUrl}
+              style={{ width: "100%" }}
+              onCanPlay={() => setAudioReady(true)}
+              onError={() => {
+                if (!audioErr) setAudioErr("Audio could not load");
+              }}
+            />
+          )}
 
           {audioErr && audioErr.toLowerCase().includes("term") ? (
             <div

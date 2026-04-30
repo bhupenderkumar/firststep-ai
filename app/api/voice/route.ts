@@ -204,6 +204,30 @@ function shouldFallover(errMsg: string): boolean {
   );
 }
 
+// Cheap probe: HEAD only checks Supabase Storage cache. Never spends Groq
+// quota. Used by the parent landing page to know whether playback will be
+// instant (200) or will need a fresh generation (204 No Content).
+export async function HEAD(req: NextRequest) {
+  const p = req.nextUrl.searchParams.get("p");
+  const voice = req.nextUrl.searchParams.get("voice") || "hannah";
+  if (!p) return new Response(null, { status: 400 });
+  const cacheKey =
+    createHash("sha256").update(`${voice}|${p}`).digest("hex").slice(0, 24) +
+    ".wav";
+  try {
+    const cached = await fetchCachedAudio(cacheKey);
+    if (cached && cached.bytes.length > 1000) {
+      return new Response(null, {
+        status: 200,
+        headers: { "Content-Type": "audio/wav", "X-Cache": "HIT" },
+      });
+    }
+  } catch {
+    // ignore — return 204
+  }
+  return new Response(null, { status: 204, headers: { "X-Cache": "MISS" } });
+}
+
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams.get("p");
   const voice = req.nextUrl.searchParams.get("voice") || "hannah";
