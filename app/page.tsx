@@ -122,165 +122,292 @@ export default function Home() {
   }
 
   return (
-    <main style={{ maxWidth: 960, margin: "40px auto", padding: 24 }}>
-      <h1 style={{ color: "#C02942" }}>First Step School - Daily Plan</h1>
-      {!adminKey ? (
-        <div
-          style={{
-            border: "2px solid #C02942",
-            borderRadius: 14,
-            padding: 24,
-            background: "#FFF4E6",
-            marginTop: 24,
-          }}
-        >
-          <h2 style={{ marginTop: 0, color: "#C02942" }}>Staff login</h2>
-          <p style={{ color: "#444" }}>
-            Only school staff can generate daily plans. Enter the admin
-            password shared with you. (Parents do <strong>not</strong> need a
-            password — they just open the share link.)
-          </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input
-              type="password"
-              value={adminKeyDraft}
-              onChange={(e) => setAdminKeyDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveAdminKey();
-              }}
-              placeholder="Admin password"
-              style={{
-                flex: 1,
-                minWidth: 220,
-                padding: 12,
-                fontSize: 16,
-                borderRadius: 8,
-                border: "1px solid #ccc",
-              }}
-            />
-            <button
-              onClick={saveAdminKey}
-              disabled={!adminKeyDraft.trim()}
-              style={{
-                padding: "12px 24px",
-                background: "#C02942",
-                color: "#fff",
-                border: 0,
-                borderRadius: 8,
-                fontWeight: 700,
-                fontSize: 16,
-                cursor: "pointer",
-              }}
-            >
-              Unlock
-            </button>
-          </div>
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-dot">★</div>
+          <span>First Step</span>
         </div>
-      ) : (
-        <>
+        <div className="spacer" />
+        {adminKey ? (
+          <>
+            <span className="chip muted hide-on-mobile">Staff</span>
+            <button className="icon-btn" onClick={clearAdminKey} aria-label="Sign out">
+              <span aria-hidden>↩</span>
+              <span className="hide-on-mobile">Sign out</span>
+            </button>
+          </>
+        ) : null}
+      </header>
+
+      {adminKey ? (
+        <TabStrip active={activeTab} onChange={setActiveTab} />
+      ) : null}
+
+      <main className="page">
+        {!adminKey ? (
+          <LoginCard
+            draft={adminKeyDraft}
+            setDraft={setAdminKeyDraft}
+            onSubmit={saveAdminKey}
+          />
+        ) : activeTab === "generate" ? (
+          <>
+            <div className="card hero">
+              <h1>Plan tomorrow in one tap</h1>
+              <p>
+                Snap the diary or paste topics — we&apos;ll build the parent &
+                teacher sheets, plus an English+Hindi audio narration.
+              </p>
+              <div className="row">
+                <span className="chip">📚 {className}</span>
+                <span className="chip muted">Auto-dated for tomorrow (IST)</span>
+              </div>
+            </div>
+
+            <div className="split">
+              <div>
+                <div className="card">
+                  <div className="card-title">Class</div>
+                  <select
+                    className="select"
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                  >
+                    {CLASS_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="card">
+                  <div className="card-title">Diary photo (optional)</div>
+                  <FilePicker
+                    hasFile={!!imageBase64}
+                    onChange={onFile}
+                    onClear={() => setImageBase64(null)}
+                  />
+                </div>
+
+                <div className="card">
+                  <div className="card-title">Or type the topics</div>
+                  <textarea
+                    className="textarea"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    rows={6}
+                    placeholder={
+                      "EVS - Myself\nEnglish - Aa to Zz\nMath - Table of 5\nComputer - Parts of Computer"
+                    }
+                  />
+                  <div className="field-help">
+                    Tip: one subject per line works best.
+                  </div>
+                </div>
+
+                <button
+                  onClick={generate}
+                  disabled={loading || (!text && !imageBase64)}
+                  className="btn btn-primary btn-block hide-on-mobile"
+                  style={{ marginTop: 4 }}
+                >
+                  {loading ? (
+                    <>
+                      <span className="spinner" /> Generating…
+                    </>
+                  ) : (
+                    <>✨ Generate Plan</>
+                  )}
+                </button>
+
+                {error ? (
+                  <div className="pill-status" style={{ background: "var(--err-50)", color: "var(--err)" }}>
+                    <span className="glyph">⚠️</span>
+                    <span>{error}</span>
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                {planId && planPayload ? (
+                  <div className="card pop">
+                    <div className="card-title">Share link ready ✨</div>
+                    <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: 13 }}>
+                      One link → friendly landing page with audio, bilingual
+                      summary, A4 sheets, and print-to-PDF. Forward on WhatsApp.
+                    </p>
+                    <AudioStatusPill status={audioStatus} detail={audioStatusDetail} />
+                    <ShareCard payload={planPayload} shortCode={shortCode} />
+                  </div>
+                ) : (
+                  <div className="card" style={{ background: "var(--surface-2)" }}>
+                    <div className="card-title">What you&apos;ll get</div>
+                    <ul style={{ paddingLeft: 18, margin: 0, color: "#444", fontSize: 14, lineHeight: 1.7 }}>
+                      <li>👨‍👩‍👧 Parent landing page (audio + summary)</li>
+                      <li>🧑‍🏫 Teacher A4 sheet with worked examples</li>
+                      <li>🔗 Two short links to share on WhatsApp</li>
+                      <li>📜 Auto-saved to History</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Sticky CTA on mobile */}
+            <div className={`sticky-cta ${(!planId || !planPayload) ? "show" : ""}`}>
+              <button
+                onClick={generate}
+                disabled={loading || (!text && !imageBase64)}
+                className="btn btn-primary btn-block"
+              >
+                {loading ? (
+                  <>
+                    <span className="spinner" /> Generating…
+                  </>
+                ) : (
+                  <>✨ Generate Plan</>
+                )}
+              </button>
+            </div>
+          </>
+        ) : (
+          <HistoryTable adminKey={adminKey} />
+        )}
+      </main>
+
+      {adminKey ? (
+        <nav className="bottom-nav">
+          <button
+            className={`item ${activeTab === "generate" ? "on" : ""}`}
+            onClick={() => setActiveTab("generate")}
+          >
+            <span className="glyph">✨</span>
+            <span>Generate</span>
+          </button>
+          <button
+            className={`item ${activeTab === "history" ? "on" : ""}`}
+            onClick={() => setActiveTab("history")}
+          >
+            <span className="glyph">📜</span>
+            <span>History</span>
+          </button>
+        </nav>
+      ) : null}
+    </div>
+  );
+}
+
+// ─────────────── Login Card ───────────────
+function LoginCard({
+  draft,
+  setDraft,
+  onSubmit,
+}: {
+  draft: string;
+  setDraft: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="card hero" style={{ marginTop: 20 }}>
+      <h1>Staff login</h1>
       <p>
-        Upload tomorrow&apos;s diary photo or paste the topics. Groq generates
-        two A4 PDFs / PNGs - one for parents, one for teachers (with worked
-        example for substitute teachers).
+        Only school staff can generate daily plans. Parents do <strong>not</strong>{" "}
+        need a password — they just open the share link.
       </p>
-      <div style={{ fontSize: 12, color: "#666", marginTop: -8 }}>
-        ✓ Logged in as staff.{" "}
-        <button
-          onClick={clearAdminKey}
-          style={{
-            background: "none",
-            border: 0,
-            color: "#185A9D",
-            cursor: "pointer",
-            textDecoration: "underline",
-            padding: 0,
-            fontSize: 12,
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+        <input
+          className="input"
+          type="password"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSubmit();
           }}
+          placeholder="Admin password"
+          style={{ flex: 1, minWidth: 220 }}
+        />
+        <button
+          onClick={onSubmit}
+          disabled={!draft.trim()}
+          className="btn btn-primary"
         >
-          Sign out
+          Unlock
         </button>
       </div>
+    </div>
+  );
+}
 
-      <TabBar active={activeTab} onChange={setActiveTab} />
-
-      {activeTab === "generate" ? (
-        <>
-      <label style={{ display: "block", marginTop: 16 }}>
-        <div style={{ fontWeight: 700 }}>Class</div>
-        <select
-          value={className}
-          onChange={(e) => setClassName(e.target.value)}
-          style={{ width: "100%", padding: 10, fontSize: 16 }}
-        >
-          {CLASS_OPTIONS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={{ display: "block", marginTop: 16 }}>
-        <div style={{ fontWeight: 700 }}>Diary photo (optional)</div>
-        <input type="file" accept="image/*" onChange={onFile} />
-      </label>
-
-      <label style={{ display: "block", marginTop: 16 }}>
-        <div style={{ fontWeight: 700 }}>Or type the topics</div>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={6}
-          style={{ width: "100%", padding: 10, fontSize: 16 }}
-          placeholder={
-            "EVS - Myself\nEnglish - Aa to Zz\nMath - Table of 5\nComputer - Parts of Computer"
-          }
-        />
-      </label>
-
-      <button
-        onClick={generate}
-        disabled={loading || (!text && !imageBase64)}
-        style={{
-          marginTop: 20,
-          padding: "12px 24px",
-          background: "#C02942",
-          color: "#FAF5EB",
-          border: 0,
-          borderRadius: 10,
-          fontSize: 18,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        {loading ? "Generating..." : "Generate Plan"}
-      </button>
-
-      {error ? (
-        <div style={{ color: "#C02942", marginTop: 16 }}>{error}</div>
-      ) : null}
-
-      {planId && planPayload ? (
-        <div style={{ marginTop: 32 }}>
-          <h2>Your share link is ready ✨</h2>
-          <p style={{ fontSize: 14, color: "#555" }}>
-            One link → opens a friendly landing page with audio narration,
-            English+Hindi summary, both A4 sheets, and a print-to-PDF button.
-            Forward it on WhatsApp.
-          </p>
-          <AudioStatusPill status={audioStatus} detail={audioStatusDetail} />
-          <ShareCard payload={planPayload} shortCode={shortCode} />
+// ─────────────── File Picker ───────────────
+function FilePicker({
+  hasFile,
+  onChange,
+  onClear,
+}: {
+  hasFile: boolean;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onClear: () => void;
+}) {
+  return (
+    <label className={`dropzone ${hasFile ? "has-file" : ""}`} style={{ display: "block", cursor: "pointer" }}>
+      <div className="file-glyph">{hasFile ? "✅" : "📷"}</div>
+      <div style={{ fontWeight: 700, marginTop: 4 }}>
+        {hasFile ? "Photo attached" : "Tap to take or pick a photo"}
+      </div>
+      <div className="file-msg">
+        {hasFile
+          ? "Tap again to replace."
+          : "Snap the diary page from your phone — we OCR it."}
+      </div>
+      <input type="file" accept="image/*" onChange={onChange} />
+      {hasFile ? (
+        <div style={{ marginTop: 10 }}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onClear();
+            }}
+            className="btn btn-ghost"
+            style={{ height: 36, padding: "0 12px", fontSize: 13 }}
+          >
+            Remove photo
+          </button>
         </div>
       ) : null}
-        </>
-      ) : null}
+    </label>
+  );
+}
 
-      {activeTab === "history" ? (
-        <HistoryTable adminKey={adminKey} />
-      ) : null}
-        </>
-      )}
-    </main>
+// ─────────────── Tab Strip (desktop) ───────────────
+function TabStrip({
+  active,
+  onChange,
+}: {
+  active: "generate" | "history";
+  onChange: (t: "generate" | "history") => void;
+}) {
+  return (
+    <div className="tab-strip" role="tablist">
+      <button
+        role="tab"
+        aria-selected={active === "generate"}
+        className={`tab ${active === "generate" ? "on" : ""}`}
+        onClick={() => onChange("generate")}
+      >
+        ✨ Generate
+      </button>
+      <button
+        role="tab"
+        aria-selected={active === "history"}
+        className={`tab ${active === "history" ? "on" : ""}`}
+        onClick={() => onChange("history")}
+      >
+        📜 History
+      </button>
+    </div>
   );
 }
 
@@ -293,39 +420,34 @@ function AudioStatusPill({
 }) {
   if (status === "idle") return null;
   const map = {
-    warming: { bg: "#FFF4D6", color: "#7A5B00", text: "🎧 Pre-generating audio for parents… (20–30s on first time, instant if cached)" },
-    ready: { bg: "#DDF5DD", color: "#246B36", text: "✓ Audio ready – parents will hear instant playback when they open the link." },
-    cached: { bg: "#DDF5DD", color: "#246B36", text: "✓ Audio served from cache – instant playback for parents." },
+    warming: { bg: "var(--warn-50)", color: "var(--warn)", glyph: "🎧", text: "Pre-generating audio for parents… (20–30s on first time, instant if cached)" },
+    ready: { bg: "var(--ok-50)", color: "var(--ok)", glyph: "✓", text: "Audio ready – parents will hear instant playback when they open the link." },
+    cached: { bg: "var(--ok-50)", color: "var(--ok)", glyph: "✓", text: "Audio served from cache – instant playback for parents." },
     rate_limited: {
-      bg: "#E8F0FA",
-      color: "#1E3A8A",
-      text: "ℹ️ Studio voice is rate-limited today. Parents will see a 'Read aloud on this device' button that uses the phone's built-in voice — free, works on every device.",
+      bg: "var(--accent-50)",
+      color: "var(--accent)",
+      glyph: "ℹ️",
+      text: "Studio voice is rate-limited today. Parents will see a 'Read aloud on this device' button — free, works on every device.",
     },
     failed: {
-      bg: "#FFE9EC",
-      color: "#A11A30",
-      text: "⚠️ Audio pre-generation hit an issue. Parents can still read the sheets and use the device-voice fallback button.",
+      bg: "var(--err-50)",
+      color: "var(--err)",
+      glyph: "⚠️",
+      text: "Audio pre-generation hit an issue. Parents can still read the sheets and use the device-voice fallback button.",
     },
   } as const;
   const s = map[status];
   return (
-    <div
-      style={{
-        background: s.bg,
-        color: s.color,
-        padding: "10px 14px",
-        borderRadius: 10,
-        marginBottom: 12,
-        fontSize: 14,
-        fontWeight: 600,
-      }}
-    >
-      {s.text}
-      {detail && status === "failed" ? (
-        <div style={{ fontSize: 12, fontWeight: 400, marginTop: 4, opacity: 0.9 }}>
-          Detail: {detail}
-        </div>
-      ) : null}
+    <div className="pill-status" style={{ background: s.bg, color: s.color }}>
+      <span className="glyph">{s.glyph}</span>
+      <div>
+        <div>{s.text}</div>
+        {detail && status === "failed" ? (
+          <div style={{ fontSize: 11, fontWeight: 400, marginTop: 4, opacity: 0.9 }}>
+            Detail: {detail}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -489,57 +611,9 @@ function ShareBlock({
   );
 }
 
-// ─────────────── Tab Bar ───────────────
-function TabBar({
-  active,
-  onChange,
-}: {
-  active: "generate" | "history";
-  onChange: (t: "generate" | "history") => void;
-}) {
-  const tabs: { id: "generate" | "history"; label: string }[] = [
-    { id: "generate", label: "✨ Generate" },
-    { id: "history", label: "📜 History" },
-  ];
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 4,
-        borderBottom: "2px solid #eee",
-        marginTop: 20,
-        marginBottom: 8,
-      }}
-    >
-      {tabs.map((t) => {
-        const on = t.id === active;
-        return (
-          <button
-            key={t.id}
-            onClick={() => onChange(t.id)}
-            style={{
-              padding: "10px 18px",
-              background: "transparent",
-              border: 0,
-              borderBottom: on ? "3px solid #C02942" : "3px solid transparent",
-              color: on ? "#C02942" : "#666",
-              fontSize: 15,
-              fontWeight: on ? 700 : 500,
-              cursor: "pointer",
-              marginBottom: -2,
-            }}
-          >
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─────────────── History Table ───────────────
-// Full audit trail of generated plans. Filterable by class, paginated, with
-// quick copy + open buttons for each share link.
+// Full audit trail. Real <table> on desktop, swipeable card list on mobile —
+// both share the same data + filters + actions.
 
 type HistoryRow = {
   id: string;
@@ -604,119 +678,74 @@ function HistoryTable({ adminKey }: { adminKey: string }) {
   }
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center",
-          marginBottom: 12,
-        }}
-      >
-        <input
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Search class, date, code, or text…"
-          style={{
-            flex: 1,
-            minWidth: 220,
-            padding: 8,
-            fontSize: 14,
-            borderRadius: 6,
-            border: "1px solid #ccc",
-          }}
-        />
-        <select
-          value={classFilter}
-          onChange={(e) => setClassFilter(e.target.value)}
-          style={{
-            padding: 8,
-            fontSize: 14,
-            borderRadius: 6,
-            border: "1px solid #ccc",
-          }}
-        >
-          <option value="">All classes</option>
-          {uniqueClasses.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <button
-          onClick={load}
-          disabled={loading}
-          style={{
-            padding: "8px 14px",
-            background: "#fff",
-            border: "1px solid #ccc",
-            borderRadius: 6,
-            cursor: "pointer",
-            fontSize: 13,
-            fontWeight: 600,
-          }}
-        >
-          {loading ? "Loading…" : "↻ Refresh"}
-        </button>
-        <span style={{ color: "#888", fontSize: 12 }}>
-          {filtered.length} of {rows?.length ?? 0}
-        </span>
+    <div>
+      <div className="card compact" style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            className="input"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="🔍 Search class, date, code, or text…"
+            style={{ flex: 1, minWidth: 200, height: 42, padding: "0 14px" }}
+          />
+          <select
+            className="select"
+            value={classFilter}
+            onChange={(e) => setClassFilter(e.target.value)}
+            style={{ width: "auto", minWidth: 130, height: 42, padding: "0 38px 0 14px" }}
+          >
+            <option value="">All classes</option>
+            {uniqueClasses.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="btn"
+            style={{ height: 42 }}
+          >
+            {loading ? "…" : "↻"}
+          </button>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted)" }}>
+          {filtered.length} of {rows?.length ?? 0} {filtered.length === 1 ? "plan" : "plans"}
+        </div>
       </div>
 
       {err ? (
-        <div
-          style={{
-            color: "#A11A30",
-            background: "#FFE9EC",
-            padding: 10,
-            borderRadius: 6,
-            fontSize: 14,
-          }}
-        >
-          {err}
+        <div className="pill-status" style={{ background: "var(--err-50)", color: "var(--err)" }}>
+          <span className="glyph">⚠️</span>
+          <span>{err}</span>
         </div>
       ) : null}
 
-      <div
-        style={{
-          border: "1px solid #eee",
-          borderRadius: 10,
-          overflow: "auto",
-          background: "#fff",
-        }}
-      >
-        <table
-          style={{
-            width: "100%",
-            borderCollapse: "collapse",
-            fontSize: 13,
-            minWidth: 760,
-          }}
-        >
+      {/* Desktop: real table */}
+      <div className="table-wrap hide-on-mobile">
+        <table className="tbl">
           <thead>
-            <tr style={{ background: "#FAF5EB", textAlign: "left" }}>
-              <Th>When (IST)</Th>
-              <Th>Class</Th>
-              <Th>For date</Th>
-              <Th>Code</Th>
-              <Th style={{ minWidth: 220 }}>Diary preview</Th>
-              <Th style={{ textAlign: "right" }}>Actions</Th>
+            <tr>
+              <th>When (IST)</th>
+              <th>Class</th>
+              <th>For date</th>
+              <th>Code</th>
+              <th style={{ minWidth: 220 }}>Diary preview</th>
+              <th style={{ textAlign: "right" }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading && !rows ? (
               <tr>
-                <td colSpan={6} style={{ padding: 20, color: "#666" }}>
+                <td colSpan={6} style={{ padding: 20, color: "var(--muted)" }}>
                   Loading…
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 20, color: "#666" }}>
-                  {rows && rows.length > 0
-                    ? "No matches for this filter."
-                    : "No plans generated yet."}
+                <td colSpan={6} style={{ padding: 20, color: "var(--muted)" }}>
+                  {rows && rows.length > 0 ? "No matches for this filter." : "No plans generated yet."}
                 </td>
               </tr>
             ) : (
@@ -729,27 +758,12 @@ function HistoryTable({ adminKey }: { adminKey: string }) {
                   timeStyle: "short",
                 });
                 return (
-                  <tr
-                    key={r.id}
-                    style={{ borderTop: "1px solid #f0f0f0" }}
-                  >
-                    <Td>{when}</Td>
-                    <Td>
-                      <strong>{r.class_name}</strong>
-                    </Td>
-                    <Td>{r.date_iso}</Td>
-                    <Td>
-                      <code
-                        style={{
-                          background: "#f5f5f5",
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                        }}
-                      >
-                        {r.id}
-                      </code>
-                    </Td>
-                    <Td>
+                  <tr key={r.id}>
+                    <td>{when}</td>
+                    <td><strong>{r.class_name}</strong></td>
+                    <td>{r.date_iso}</td>
+                    <td><code className="code-pill">{r.id}</code></td>
+                    <td>
                       <span
                         title={r.input_preview || ""}
                         style={{
@@ -764,47 +778,18 @@ function HistoryTable({ adminKey }: { adminKey: string }) {
                       >
                         {r.input_preview || "—"}
                       </span>
-                    </Td>
-                    <Td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      <a
-                        href={parentUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          color: "#185A9D",
-                          fontWeight: 600,
-                          marginRight: 8,
-                        }}
-                      >
-                        Parent
-                      </a>
-                      <a
-                        href={teacherUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          color: "#185A9D",
-                          fontWeight: 600,
-                          marginRight: 8,
-                        }}
-                      >
-                        Teacher
-                      </a>
+                    </td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <a href={parentUrl} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontWeight: 700, marginRight: 10, textDecoration: "none" }}>Parent</a>
+                      <a href={teacherUrl} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", fontWeight: 700, marginRight: 10, textDecoration: "none" }}>Teacher</a>
                       <button
                         onClick={() => copy(r.id, parentUrl)}
-                        style={{
-                          background: "none",
-                          border: "1px solid #ddd",
-                          borderRadius: 4,
-                          padding: "2px 8px",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          color: "#444",
-                        }}
+                        className="btn"
+                        style={{ height: 30, padding: "0 10px", fontSize: 12 }}
                       >
-                        {copied === r.id ? "✓ copied" : "Copy"}
+                        {copied === r.id ? "✓" : "Copy"}
                       </button>
-                    </Td>
+                    </td>
                   </tr>
                 );
               })
@@ -812,44 +797,56 @@ function HistoryTable({ adminKey }: { adminKey: string }) {
           </tbody>
         </table>
       </div>
+
+      {/* Mobile: card list */}
+      <div className="hist-list show-on-mobile">
+        {loading && !rows ? (
+          <>
+            <div className="hist-card"><div className="skel" style={{ width: "60%" }} /><div className="skel" style={{ width: "30%", marginTop: 8 }} /></div>
+            <div className="hist-card"><div className="skel" style={{ width: "70%" }} /><div className="skel" style={{ width: "40%", marginTop: 8 }} /></div>
+          </>
+        ) : filtered.length === 0 ? (
+          <div className="hist-card" style={{ textAlign: "center", color: "var(--muted)" }}>
+            {rows && rows.length > 0 ? "No matches for this filter." : "No plans yet — generate one ✨"}
+          </div>
+        ) : (
+          filtered.map((r) => {
+            const parentUrl = `${origin}/s/${r.id}`;
+            const teacherUrl = `${origin}/t/${r.id}`;
+            const when = new Date(r.created_at).toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+              dateStyle: "medium",
+              timeStyle: "short",
+            });
+            return (
+              <div className="hist-card" key={r.id}>
+                <div className="hist-meta">
+                  <div>
+                    <strong>{r.class_name}</strong>
+                    <span style={{ color: "var(--muted)", marginLeft: 6 }}>· {r.date_iso}</span>
+                  </div>
+                  <code className="code-pill">{r.id}</code>
+                </div>
+                <div className="when">{when}</div>
+                {r.input_preview ? (
+                  <div className="preview" title={r.input_preview}>{r.input_preview}</div>
+                ) : null}
+                <div className="actions">
+                  <a href={parentUrl} target="_blank" rel="noreferrer">👨‍👩‍👧 Parent</a>
+                  <a href={teacherUrl} target="_blank" rel="noreferrer">🧑‍🏫 Teacher</a>
+                  <button
+                    onClick={() => copy(r.id, parentUrl)}
+                    className="btn"
+                    style={{ height: 32, padding: "0 12px", fontSize: 12, marginLeft: "auto" }}
+                  >
+                    {copied === r.id ? "✓ copied" : "Copy parent"}
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
-  );
-}
-
-function Th({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <th
-      style={{
-        padding: "10px 12px",
-        fontSize: 12,
-        fontWeight: 700,
-        color: "#444",
-        textTransform: "uppercase",
-        letterSpacing: 0.4,
-        ...style,
-      }}
-    >
-      {children}
-    </th>
-  );
-}
-
-function Td({
-  children,
-  style,
-}: {
-  children: React.ReactNode;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <td style={{ padding: "10px 12px", verticalAlign: "middle", ...style }}>
-      {children}
-    </td>
   );
 }
