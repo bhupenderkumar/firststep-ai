@@ -23,7 +23,9 @@ export function shortId(len = 6): string {
 export async function createShortLink(
   payload: string,
   className: string,
-  dateIso: string
+  dateIso: string,
+  inputHash?: string,
+  inputPreview?: string
 ): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const id = shortId();
@@ -32,6 +34,8 @@ export async function createShortLink(
       payload,
       class_name: className,
       date_iso: dateIso,
+      input_hash: inputHash ?? null,
+      input_preview: inputPreview ?? null,
     });
     if (!error) return id;
     // 23505 = unique_violation → collision, retry
@@ -52,6 +56,47 @@ export async function resolveShortLink(
     .single();
   if (error || !data) return null;
   return data.payload;
+}
+
+/**
+ * Look up a previously-generated plan by its input hash + className + date.
+ * Lets the admin click "Generate" repeatedly without spending Cerebras tokens.
+ */
+export async function findPlanByInputHash(
+  inputHash: string,
+  className: string,
+  dateIso: string
+): Promise<{ id: string; payload: string } | null> {
+  const { data, error } = await supabase
+    .from("short_links")
+    .select("id, payload")
+    .eq("input_hash", inputHash)
+    .eq("class_name", className)
+    .eq("date_iso", dateIso)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { id: data.id, payload: data.payload };
+}
+
+export type HistoryRow = {
+  id: string;
+  class_name: string;
+  date_iso: string;
+  created_at: string;
+  input_preview: string | null;
+};
+
+/** List recent plans for the admin history panel. */
+export async function listRecentPlans(limit = 30): Promise<HistoryRow[]> {
+  const { data, error } = await supabase
+    .from("short_links")
+    .select("id, class_name, date_iso, created_at, input_preview")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+  return data as HistoryRow[];
 }
 
 // ─────────── Audio cache (Storage bucket: audio-cache) ───────────

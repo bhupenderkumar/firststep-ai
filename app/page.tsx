@@ -45,10 +45,16 @@ export default function Home() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const buf = await file.arrayBuffer();
-    const b64 = btoa(
-      new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), "")
-    );
+    // FileReader is mobile-safe — handles large camera photos without blowing
+    // the call stack the way `btoa(reduce)` does on big inputs.
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(fr.error || new Error("read failed"));
+      fr.onload = () => resolve(String(fr.result));
+      fr.readAsDataURL(file);
+    });
+    // Strip "data:<mime>;base64," prefix → keep only base64 bytes.
+    const b64 = dataUrl.split(",")[1] || "";
     setImageBase64(b64);
   }
 
@@ -261,6 +267,8 @@ export default function Home() {
           <ShareCard payload={planPayload} shortCode={shortCode} />
         </div>
       ) : null}
+
+      <HistoryPanel adminKey={adminKey} refreshKey={shortCode || ""} />
         </>
       )}
     </main>
@@ -468,6 +476,217 @@ function ShareBlock({
           {openLabel}
         </a>
       </div>
+    </div>
+  );
+}
+
+// ─────────────── History Panel ───────────────
+// Lists the last 30 plans this school has generated. Lets staff re-share an
+// older link without regenerating, and gives a clear audit trail of what's
+// been sent to parents.
+
+type HistoryRow = {
+  id: string;
+  class_name: string;
+  date_iso: string;
+  created_at: string;
+  input_preview: string | null;
+};
+
+function HistoryPanel({
+  adminKey,
+  refreshKey,
+}: {
+  adminKey: string;
+  refreshKey: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<HistoryRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const r = await fetch("/api/history?limit=30", {
+        headers: { "x-admin-key": adminKey },
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      setRows(j.rows || []);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "load failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Auto-refresh whenever a new plan is shared.
+  useEffect(() => {
+    if (open) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey, open]);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+  return (
+    <div
+      style={{
+        marginTop: 40,
+        border: "1px solid #ddd",
+        borderRadius: 12,
+        background: "#fff",
+      }}
+    >
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%",
+          textAlign: "left",
+          padding: "14px 18px",
+          background: "transparent",
+          border: 0,
+          fontSize: 16,
+          fontWeight: 700,
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <span>📜 Recent plans (history)</span>
+        <span style={{ color: "#888", fontWeight: 400 }}>
+          {open ? "Hide ▾" : "Show ▸"}
+        </span>
+      </button>
+      {open ? (
+        <div style={{ padding: "0 18px 18px" }}>
+          {loading ? (
+            <div style={{ color: "#666", fontSize: 14 }}>Loading…</div>
+          ) : err ? (
+            <div style={{ color: "#C02942", fontSize: 14 }}>
+              Couldn’t load history: {err}
+            </div>
+          ) : !rows || rows.length === 0 ? (
+            <div style={{ color: "#666", fontSize: 14 }}>
+              No plans generated yet.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                fontSize: 13,
+              }}
+            >
+              {rows.map((r) => {
+                const parentUrl = `${origin}/s/${r.id}`;
+                const teacherUrl = `${origin}/t/${r.id}`;
+                const when = new Date(r.created_at).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                });
+                return (
+                  <div
+                    key={r.id}
+                    style={{
+                      padding: 10,
+                      border: "1px solid #eee",
+                      borderRadius: 8,
+                      background: "#FAFAFA",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                        gap: 6,
+                      }}
+                    >
+                      <div>
+                        <strong>{r.class_name}</strong>
+                        <span style={{ color: "#666" }}> · {r.date_iso}</span>
+                      </div>
+                      <div style={{ color: "#888", fontSize: 12 }}>{when}</div>
+                    </div>
+                    {r.input_preview ? (
+                      <div
+                        style={{
+                          color: "#555",
+                          fontSize: 12,
+                          marginTop: 4,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                        title={r.input_preview}
+                      >
+                        {r.input_preview}
+                      </div>
+                    ) : null}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        marginTop: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <a
+                        href={parentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "#185A9D", fontWeight: 600 }}
+                      >
+                        Parent link
+                      </a>
+                      <a
+                        href={teacherUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ color: "#185A9D", fontWeight: 600 }}
+                      >
+                        Teacher link
+                      </a>
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(parentUrl)}
+                        style={{
+                          background: "none",
+                          border: 0,
+                          color: "#666",
+                          cursor: "pointer",
+                          padding: 0,
+                          fontSize: 12,
+                        }}
+                      >
+                        Copy parent
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <button
+            onClick={load}
+            disabled={loading}
+            style={{
+              marginTop: 12,
+              padding: "6px 12px",
+              background: "#fff",
+              border: "1px solid #ccc",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            Refresh
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
